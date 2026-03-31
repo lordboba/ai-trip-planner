@@ -181,7 +181,7 @@ Complete visual redesign of the AI trip planner from custom CSS to Tailwind CSS.
 ## Out of Scope
 
 - Real LLM integration (stays mocked)
-- Real API calls (Yelp, Google Places)
+- Real API calls (Google Places)
 - Database persistence
 - Authentication / user accounts
 - Share functionality

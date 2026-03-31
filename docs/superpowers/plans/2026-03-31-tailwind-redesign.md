@@ -228,7 +228,7 @@ export default function HomePage() {
             ))}
           </div>
           <p className="text-center text-warm-400 text-sm">
-            Personalized itineraries backed by real reviews from Yelp and local sources
+            Personalized itineraries backed by Google Places reviews and location data
           </p>
         </div>
       </section>

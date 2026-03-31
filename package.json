@@ -13,7 +13,7 @@
     "frontend:dev": "next dev --turbopack",
     "backend:dev": "node --watch --experimental-strip-types backend/src/server.ts",
     "backend:start": "node --experimental-strip-types backend/src/server.ts",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },

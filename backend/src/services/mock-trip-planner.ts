@@ -251,7 +251,7 @@ export function buildMockTripPlan(request: TripRequest): TripPlan {
         url: "https://maps.google.com/",
       },
     ],
-    reviewStrategy: "Yelp-first restaurant sentiment, secondary coverage from Google Places or Foursquare for broader attraction and hotel support.",
+    reviewStrategy: "Google Places is the sole place and review source for the phase-one app, covering restaurants, neighborhoods, hotels, and attractions through one integration.",
     shareSummary: `A ${request.travelerProfile.pace} ${request.travelerProfile.tripType} trip tuned for ${request.travelerProfile.interests.join(", ")} with a ${request.travelerProfile.budgetBand} budget and room for ${request.travelerProfile.mustHaves.toLowerCase()}.`,
     agentTrace: [
       {

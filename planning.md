@@ -118,7 +118,7 @@ Final planner output containing destination summary, neighborhood and lodging re
 - `Profile Agent`: converts onboarding responses into a structured traveler profile and resolves missing or conflicting preferences.
 - `Destination Agent`: proposes or validates destinations and neighborhoods based on taste, constraints, budget, and seasonality assumptions.
 - `Lodging Agent`: recommends where to stay and explains the lodging and neighborhood fit.
-- `Food & Reviews Agent`: fetches Yelp and secondary review data, summarizes sentiment, and ranks food, nightlife, and local business candidates.
+- `Food & Reviews Agent`: fetches Google Places review and place data, summarizes sentiment, and ranks restaurants, cafes, bars, hotels, and attractions.
 - `Activities Agent`: finds attractions, experiences, and day-structure options that match pace and interests.
 - `Itinerary Agent`: assembles recommendations into a coherent day-by-day plan with logical geographic flow.
 - `Budget Agent`: checks the draft itinerary against the stated budget and flags conflicts or expensive choices.
@@ -136,15 +136,13 @@ The planner should use external review and place data so recommendations are gro
 
 ### Default source strategy
 
-- **Primary review source for food, nightlife, and local businesses: Yelp Fusion API**
-- **Secondary or fallback source for hotels, attractions, and broader international coverage: Google Places API**
-- If Google Places is too heavy on cost or setup during the hackathon, evaluate **Foursquare** as the lighter alternative
+- **Single review and location source for phase one: Google Places API**
 
 ### Why this combination
 
-- Yelp is strong for restaurant and nightlife sentiment and often has richer opinionated review language.
-- Yelp is weaker as a universal travel source, especially for hotels, attractions, and some non-US or lower-coverage markets.
-- A second source reduces blind spots and lets the system compare consensus or contradictions across providers.
+- Google Places gives one integration for restaurants, hotels, attractions, and general location lookup.
+- Using one provider reduces integration time and cost complexity for the hackathon MVP.
+- Phase one should favor operational simplicity over multi-provider consensus analysis.
 
 ### Review-analysis requirements
 
@@ -210,7 +208,7 @@ The MVP should feel complete for a demo while staying intentionally narrow.
 
 1. Set up the provider abstraction and shared trip schemas.
 2. Build onboarding and traveler-profile persistence.
-3. Integrate Yelp and the secondary place source.
+3. Integrate Google Places as the single place source.
 4. Implement subagent orchestration and itinerary generation.
 5. Ship a polished results page with booking and maps handoff links.
 6. Deploy the website MVP.
@@ -233,7 +231,7 @@ The MVP should be considered successful when the following scenarios work:
 - A user with a fixed destination and clear preferences receives a full itinerary with explainable recommendations.
 - A user without a destination receives destination suggestions before itinerary generation.
 - Quiet or budget-sensitive users are not routed to loud or premium options unless they explicitly opt in.
-- If Yelp has sparse coverage or fails, the app falls back to the secondary location source.
+- Google Places-backed planning succeeds for destinations, lodging, dining, and activity recommendations through one normalized place layer.
 - OpenAI-backed and Claude-backed runs both succeed through the same orchestration flow.
 - Onboarding can be completed in a few minutes without feeling shallow.
 - The final trip plan is shareable, coherent, and production-demo ready.
@@ -244,7 +242,7 @@ The MVP should be considered successful when the following scenarios work:
 - Mobile remains a serious product option, but not the primary hackathon build.
 - The MVP uses managed services and avoids custom infrastructure.
 - "End to end" includes planning and booking handoff, not direct bookings.
-- Yelp is included, but a secondary location or review source is required for coverage gaps.
+- Google Places is the sole location and review provider for phase one.
 - Immediate scale is out of scope; demo quality and personalization depth are the priorities.
 
 ## Recommended Next Step
@@ -252,5 +250,5 @@ The MVP should be considered successful when the following scenarios work:
 1. Define TypeScript schemas for `TripRequest`, `PlaceCandidate`, `ItineraryDay`, and `TripPlan`.
 2. Implement the provider abstraction for OpenAI and Anthropic.
 3. Build the onboarding flow and save the traveler profile.
-4. Add Yelp plus a secondary location source.
+4. Add Google Places and normalize its results into the shared planner contracts.
 5. Wire the coordinator and subagents to generate the first demo itinerary.

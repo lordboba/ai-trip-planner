@@ -60,5 +60,5 @@ The Next.js API routes currently call the same backend service layer directly, s
 1. Replace the mock planner in `lib/mock-planner.ts` with real provider adapters.
 2. Move the website to call the standalone backend over HTTP instead of importing the service layer directly.
 3. Add Supabase persistence for trip requests and saved plans.
-4. Wire Yelp Fusion and Google Places or Foursquare normalization into the coordinator.
+4. Wire Google Places normalization into the coordinator as the sole place and review provider.
 5. Add auth and share links.

@@ -41,7 +41,7 @@ export const tripRequestSchema = z.object({
 
 export const placeCandidateSchema = z.object({
   name: z.string(),
-  source: z.enum(["yelp", "google-places", "foursquare", "mock"]),
+  source: z.enum(["google-places", "mock"]),
   category: z.string(),
   rating: z.number(),
   priceBand: z.string(),
