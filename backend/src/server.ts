@@ -61,7 +61,7 @@ async function handler(request: IncomingMessage, response: ServerResponse) {
         return;
       }
 
-      const stored = createTrip(parsed.data);
+      const stored = await createTrip(parsed.data);
       sendJson(response, 201, { tripId: stored.id });
     } catch {
       sendJson(response, 400, { error: "Unable to parse JSON body." });

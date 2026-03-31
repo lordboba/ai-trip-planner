@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTripById } from "@/backend/src/services/trip-service";
+import { fetchTripRecord } from "@/lib/server/trip-backend";
+
+export const maxDuration = 300;
 
 export async function GET(_: Request, { params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = await params;
-  const stored = getTripById(tripId);
+  const stored = await fetchTripRecord(tripId);
 
   if (!stored) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });

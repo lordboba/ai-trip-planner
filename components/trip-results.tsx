@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { GoogleMapFrame } from "@/components/google-map-frame";
 import type { TripPlan, TripRequest } from "@/lib/types";
 
 type Props = {
@@ -23,6 +24,8 @@ export function TripResults({ plan, request }: Props) {
 
   const day = plan.dailyItinerary[activeDay];
   const totalActivities = plan.dailyItinerary.length * 3;
+  const mapQuery = request.destinationContext.selectedPlaceLabel || plan.destinationSummary.title;
+  const mapPlaceId = request.destinationContext.selectedPlaceId;
 
   return (
     <div>
@@ -56,7 +59,9 @@ export function TripResults({ plan, request }: Props) {
           </div>
 
           <div className="absolute bottom-4 right-4 bg-warm-900 border border-warm-600 px-3 py-1 rounded-lg text-[10px] text-coral-light">
-            Planned with Claude ✨
+            {plan.generation.live
+              ? `Live ${plan.provider === "openai" ? "OpenAI" : "Claude"} · ${plan.generation.model}`
+              : `Mock ${plan.provider === "openai" ? "OpenAI" : "Claude"} path`}
           </div>
         </div>
       </section>
@@ -132,6 +137,37 @@ export function TripResults({ plan, request }: Props) {
                     <p className="text-xs text-warm-400 mt-1">{plan.diningList[0].reasonToRecommend}</p>
                   </div>
                 )}
+              </div>
+
+              <div className="mt-6 overflow-hidden rounded-[1.5rem] border border-warm-100 bg-gradient-to-br from-warm-900 via-warm-600 to-coral-deep p-[1px] shadow-[0_24px_70px_rgba(26,22,20,0.12)]">
+                <div className="grid gap-4 rounded-[calc(1.5rem-1px)] bg-cream p-4 md:grid-cols-[0.95fr_1.05fr] md:p-5">
+                  <div className="flex flex-col justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-coral">Trip map</p>
+                      <h3 className="mt-2 text-lg font-extrabold text-warm-900">{mapQuery}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-warm-400">{plan.reviewStrategy}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {plan.bookingLinks.map((link) => (
+                        <a
+                          key={link.label}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full border border-warm-100 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-600 transition-colors hover:border-coral hover:text-coral"
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  <GoogleMapFrame
+                    query={mapQuery}
+                    placeId={mapPlaceId}
+                    title="Trip destination map"
+                    className="h-72 w-full overflow-hidden rounded-[1.25rem] border border-warm-100"
+                  />
+                </div>
               </div>
 
               {/* All Dining */}

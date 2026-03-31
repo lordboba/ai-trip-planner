@@ -1,1 +1,1 @@
-export { buildMockTripPlan } from "../backend/src/services/mock-trip-planner.ts";
+export { buildStructuredTrip } from "../backend/src/services/mock-trip-planner.ts";

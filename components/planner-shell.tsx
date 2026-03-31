@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { onboardingSteps } from "@/lib/onboarding";
+import { GoogleMapFrame } from "@/components/google-map-frame";
 import type {
   BudgetBand,
   DestinationIntent,
@@ -47,6 +48,7 @@ type FormState = {
   dateFlexibility: string;
   destinationIntent: DestinationIntent;
   destinationQuery: string;
+  destinationPlaceId?: string;
   budgetBand: BudgetBand;
   splurgeTolerance: number;
   pace: Pace;
@@ -60,6 +62,20 @@ type FormState = {
   surpriseTolerance: SurpriseTolerance;
 };
 
+type DestinationSuggestion = {
+  placeId: string;
+  text: string;
+  mainText: string;
+  secondaryText: string;
+  types: string[];
+};
+
+type AutocompleteResponse = {
+  suggestions: DestinationSuggestion[];
+  live: boolean;
+  reason: string | null;
+};
+
 const initialState: FormState = {
   provider: "openai",
   tripType: "couple",
@@ -68,6 +84,7 @@ const initialState: FormState = {
   dateFlexibility: "Weekend in June works too.",
   destinationIntent: "help-me-choose",
   destinationQuery: "",
+  destinationPlaceId: undefined,
   budgetBand: "comfort",
   splurgeTolerance: 60,
   pace: "balanced",
@@ -105,14 +122,30 @@ export function PlannerShell() {
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [form, setForm] = useState<FormState>(initialState);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<DestinationSuggestion[]>([]);
+  const [autocompleteLive, setAutocompleteLive] = useState(false);
+  const [autocompleteReason, setAutocompleteReason] = useState<string | null>(null);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [isAutocompletePending, setIsAutocompletePending] = useState(false);
+  const [autocompleteSessionToken, setAutocompleteSessionToken] = useState(() => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    return `session-${Math.random().toString(36).slice(2)}`;
+  });
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const deferredDestinationQuery = useDeferredValue(form.destinationQuery);
 
   const destinationHint = useMemo(() => {
     if (form.destinationIntent === "fixed") return "Enter a city or region you already want.";
     if (form.destinationIntent === "shortlist") return "List a few options, separated by commas.";
     return "Leave blank if you want the planner to choose from your taste profile.";
   }, [form.destinationIntent]);
+
+  const autocompleteEnabled = form.destinationIntent !== "help-me-choose" && !deferredDestinationQuery.includes(",");
+  const destinationPreviewQuery = form.destinationQuery.trim();
 
   const canContinue = useMemo(() => {
     if (stepIndex === 0) return Boolean(form.provider && form.tripType);
@@ -140,10 +173,90 @@ export function PlannerShell() {
         hardNos: form.hardNos, loyaltyPrograms: form.loyaltyPrograms,
         surpriseTolerance: form.surpriseTolerance,
       },
-      destinationContext: { destinationQuery: form.destinationQuery, shortlist },
+      destinationContext: {
+        destinationQuery: form.destinationQuery,
+        shortlist,
+        selectedPlaceId: form.destinationPlaceId,
+        selectedPlaceLabel: form.destinationQuery || undefined,
+      },
       constraints: form.constraintsNotes.split(",").map((i) => i.trim()).filter(Boolean),
       createdAt: new Date().toISOString(),
     };
+  }
+
+  useEffect(() => {
+    if (!autocompleteEnabled) {
+      setDestinationSuggestions([]);
+      setSuggestionsOpen(false);
+      return;
+    }
+
+    const trimmed = deferredDestinationQuery.trim();
+
+    if (trimmed.length < 2) {
+      setDestinationSuggestions([]);
+      setSuggestionsOpen(false);
+      setAutocompleteReason(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setIsAutocompletePending(true);
+
+      try {
+        const params = new URLSearchParams({
+          input: trimmed,
+          sessionToken: autocompleteSessionToken,
+        });
+        const response = await fetch(`/api/places/autocomplete?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const data = await response.json() as AutocompleteResponse;
+
+        if (!response.ok) {
+          throw new Error(data.reason ?? "Autocomplete request failed.");
+        }
+
+        setDestinationSuggestions(data.suggestions);
+        setAutocompleteLive(data.live);
+        setAutocompleteReason(data.reason);
+        setSuggestionsOpen(data.suggestions.length > 0);
+      } catch (autocompleteError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setDestinationSuggestions([]);
+        setAutocompleteLive(false);
+        setAutocompleteReason(autocompleteError instanceof Error ? autocompleteError.message : "Autocomplete request failed.");
+        setSuggestionsOpen(false);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsAutocompletePending(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [autocompleteEnabled, autocompleteSessionToken, deferredDestinationQuery]);
+
+  function selectDestinationSuggestion(suggestion: DestinationSuggestion) {
+    setForm((current) => ({
+      ...current,
+      destinationQuery: suggestion.text,
+      destinationPlaceId: suggestion.placeId,
+    }));
+    setDestinationSuggestions([]);
+    setSuggestionsOpen(false);
+    setAutocompleteReason(null);
+    setAutocompleteSessionToken(typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `session-${Math.random().toString(36).slice(2)}`);
   }
 
   function nextStep() { setDirection(1); setStepIndex((c) => Math.min(c + 1, totalSteps - 1)); }
@@ -245,11 +358,98 @@ export function PlannerShell() {
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <label htmlFor="destinationQuery" className={labelClasses}>Destination notes</label>
-                    <input id="destinationQuery" placeholder={form.destinationIntent === "shortlist" ? "Lisbon, Mexico City, Kyoto" : "Lisbon"} value={form.destinationQuery}
-                      onChange={(e) => setForm((c) => ({ ...c, destinationQuery: e.target.value }))} className={`${inputClasses} placeholder:text-warm-400`} />
-                    <p className="text-xs text-warm-400 mt-1.5">{destinationHint}</p>
+                  <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+                    <div className="relative">
+                      <label htmlFor="destinationQuery" className={labelClasses}>Destination notes</label>
+                      <div className="rounded-[1.4rem] border border-warm-100 bg-white/90 p-2 shadow-[0_24px_60px_rgba(61,54,50,0.08)]">
+                        <div className="flex items-center gap-3 rounded-[1.1rem] bg-gradient-to-r from-coral-wash via-white to-warm-50 px-3 py-2">
+                          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-warm-900 text-sm text-white shadow-[0_10px_25px_rgba(26,22,20,0.22)]">
+                            ⌘
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <input
+                              id="destinationQuery"
+                              placeholder={form.destinationIntent === "shortlist" ? "Lisbon, Mexico City, Kyoto" : "Lisbon"}
+                              value={form.destinationQuery}
+                              onChange={(e) => setForm((current) => ({ ...current, destinationQuery: e.target.value, destinationPlaceId: undefined }))}
+                              onFocus={() => setSuggestionsOpen(destinationSuggestions.length > 0)}
+                              autoComplete="off"
+                              className="w-full bg-transparent text-sm font-semibold text-warm-900 placeholder:text-warm-400 focus:outline-none"
+                            />
+                            <p className="mt-0.5 text-[11px] text-warm-400">{destinationHint}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${autocompleteLive ? "text-coral" : "text-warm-400"}`}>
+                              {autocompleteLive ? "Live search" : "Planner input"}
+                            </div>
+                            <div className="text-[10px] text-warm-400">
+                              {isAutocompletePending ? "Searching..." : form.destinationIntent === "help-me-choose" ? "Optional" : "Google Places"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {suggestionsOpen && destinationSuggestions.length > 0 && (
+                        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-[1.25rem] border border-warm-100 bg-cream shadow-[0_26px_70px_rgba(26,22,20,0.14)]">
+                          {destinationSuggestions.map((suggestion) => (
+                            <button
+                              key={suggestion.placeId}
+                              type="button"
+                              onClick={() => selectDestinationSuggestion(suggestion)}
+                              className="flex w-full items-start gap-3 border-b border-warm-100/80 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-coral-wash"
+                            >
+                              <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-warm-900 text-xs text-white">
+                                ✦
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-warm-900">{suggestion.mainText}</div>
+                                <div className="truncate text-xs text-warm-400">{suggestion.secondaryText || suggestion.text}</div>
+                              </div>
+                              <div className="text-[10px] uppercase tracking-[0.16em] text-coral">
+                                {suggestion.types[0]?.replaceAll("_", " ") ?? "place"}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {autocompleteReason && (
+                        <p className="mt-2 text-[11px] text-warm-400">{autocompleteReason}</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-[1.6rem] border border-warm-100 bg-gradient-to-br from-warm-900 via-warm-600 to-coral-deep p-[1px] shadow-[0_28px_90px_rgba(26,22,20,0.18)]">
+                      <div className="h-full rounded-[calc(1.6rem-1px)] bg-cream/95 p-3">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-coral">Atlas Lens</p>
+                            <h3 className="mt-1 text-sm font-bold text-warm-900">
+                              {destinationPreviewQuery || "Destination map preview"}
+                            </h3>
+                          </div>
+                          <div className="rounded-full bg-coral-wash px-2.5 py-1 text-[10px] font-semibold text-coral">
+                            {form.destinationPlaceId ? "Pinned" : "Search-led"}
+                          </div>
+                        </div>
+                        <div className="overflow-hidden rounded-[1.2rem] border border-warm-100 bg-warm-50">
+                          {destinationPreviewQuery ? (
+                            <GoogleMapFrame
+                              query={destinationPreviewQuery}
+                              placeId={form.destinationPlaceId}
+                              title="Destination preview map"
+                              className="h-56 w-full rounded-[1.2rem]"
+                            />
+                          ) : (
+                            <div className="grid h-56 place-items-center bg-[radial-gradient(circle_at_top,_rgba(255,107,66,0.18),_transparent_45%),linear-gradient(135deg,_#f5f1ee,_#fff5f0)] px-6 text-center">
+                              <div>
+                                <p className="text-sm font-semibold text-warm-900">Search a city to preview it on the map.</p>
+                                <p className="mt-1 text-xs text-warm-400">The planner uses this surface for fixed destinations and shortlist exploration.</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

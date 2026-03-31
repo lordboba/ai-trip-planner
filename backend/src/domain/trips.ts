@@ -34,20 +34,26 @@ export const tripRequestSchema = z.object({
   destinationContext: z.object({
     destinationQuery: z.string(),
     shortlist: z.array(z.string()),
+    selectedPlaceId: z.string().optional(),
+    selectedPlaceLabel: z.string().optional(),
   }),
   constraints: z.array(z.string()),
   createdAt: z.string(),
 });
 
 export const placeCandidateSchema = z.object({
+  placeId: z.string().optional(),
   name: z.string(),
   source: z.enum(["google-places", "mock"]),
   category: z.string(),
   rating: z.number(),
   priceBand: z.string(),
   reviewSnippets: z.array(z.string()).readonly(),
+  reviewSummary: z.string().optional(),
+  address: z.string().optional(),
   lat: z.number(),
   lng: z.number(),
+  googleMapsUri: z.string().url().optional(),
   reasonToRecommend: z.string(),
 });
 
@@ -79,8 +85,45 @@ export const bookingLinkSchema = z.object({
   url: z.string().url(),
 });
 
+export const generationMetadataSchema = z.object({
+  provider: llmProviderSchema,
+  model: z.string(),
+  live: z.boolean(),
+  fallbackReason: z.string().nullable(),
+});
+
+export const workflowStepSchema = z.enum([
+  "profile",
+  "destination",
+  "dining",
+  "activities",
+  "lodging",
+  "itinerary",
+  "budget",
+  "finalize",
+]);
+
+export const workflowStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
+
+export const workflowStepResultSchema = z.object({
+  step: workflowStepSchema,
+  status: workflowStatusSchema,
+  summary: z.string(),
+  output: z.record(z.string(), z.unknown()),
+  execution: generationMetadataSchema,
+});
+
+export const tripWorkflowSchema = z.object({
+  id: z.string().uuid(),
+  status: workflowStatusSchema,
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  steps: z.array(workflowStepResultSchema),
+});
+
 export const tripPlanSchema = z.object({
   provider: llmProviderSchema,
+  generation: generationMetadataSchema,
   destinationSummary: z.object({
     title: z.string(),
     overview: z.string(),
@@ -103,6 +146,7 @@ export const storedTripSchema = z.object({
   id: z.string().uuid(),
   createdAt: z.string(),
   request: tripRequestSchema,
+  workflow: tripWorkflowSchema,
   plan: tripPlanSchema,
 });
 
@@ -119,5 +163,10 @@ export type ItineraryBlock = z.infer<typeof itineraryBlockSchema>;
 export type ItineraryDay = z.infer<typeof itineraryDaySchema>;
 export type AgentTrace = z.infer<typeof agentTraceSchema>;
 export type BookingLink = z.infer<typeof bookingLinkSchema>;
+export type GenerationMetadata = z.infer<typeof generationMetadataSchema>;
+export type WorkflowStep = z.infer<typeof workflowStepSchema>;
+export type WorkflowStatus = z.infer<typeof workflowStatusSchema>;
+export type WorkflowStepResult = z.infer<typeof workflowStepResultSchema>;
+export type TripWorkflow = z.infer<typeof tripWorkflowSchema>;
 export type TripPlan = z.infer<typeof tripPlanSchema>;
 export type StoredTrip = z.infer<typeof storedTripSchema>;

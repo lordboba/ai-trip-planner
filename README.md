@@ -4,6 +4,8 @@ Website-first MVP skeleton for the trip planner described in [planning.md](./pla
 
 The repo now also includes a standalone backend component under [`backend/src`](./backend/src) so the future mobile client and the website can share the same trip API surface.
 
+For deployment, the intended phase-one setup is a single Vercel project: the Next.js frontend and the API routes ship together, while the backend workflow logic remains isolated under `backend/src`.
+
 ## Stack
 
 - `Next.js 16.2.1`
@@ -30,6 +32,16 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
+Note on TypeScript config: Next.js 16 may rewrite `tsconfig.json` during `dev` or `build` to add generated `.next/types` includes. This repo uses `tsconfig.typecheck.json` for `pnpm typecheck` so local typechecking remains stable even when Next mutates the main file.
+
+Optional web-to-backend override:
+
+```bash
+BACKEND_URL=http://127.0.0.1:8787
+```
+
+Leave `BACKEND_URL` unset for the same-project Vercel shape, where the Next app uses the backend service layer in-process. Set it only when the web app should call a separately deployed backend.
+
 ## Backend
 
 Run the standalone backend service:
@@ -44,21 +56,55 @@ The backend listens on `http://localhost:8787` by default and exposes:
 - `POST /api/trips`
 - `GET /api/trips/:tripId`
 
-The Next.js API routes currently call the same backend service layer directly, so the website keeps working while the mobile-facing backend is being separated.
+The Next.js API routes and trip pages now go through a backend adapter. With no `BACKEND_URL`, they call the backend service layer in-process. If `BACKEND_URL` is set, they switch to HTTP calls against that external backend without changing the UI code.
+
+## Vercel deployment shape
+
+- Deploy frontend and backend in the same Vercel project for phase one.
+- Keep the route handlers under `app/api/*` as the deployable backend surface.
+- Keep orchestration, schemas, and state-machine logic under `backend/src/*` so mobile and web share the same backend contracts.
+- The standalone `backend/src/server.ts` remains useful for local dev and eventual split-project deployment, but it is not required for Vercel.
 
 ## Current flow
 
 - Landing page with a designed website-first pitch
 - Long-onboarding planner shell
 - Provider selector for OpenAI vs Claude
-- Mock end-to-end `POST /api/trips` generation flow
+- Live-or-mock end-to-end `POST /api/trips` generation flow
+- Google Places-powered destination autocomplete in onboarding
+- Internal map embed route for destination and trip map previews
 - Results page backed by typed trip contracts and an in-memory store
 - Standalone backend server with the same trip creation and fetch endpoints
+- Structured workflow orchestration with validated step outputs, direct OpenAI/Claude backend calls, and a stored workflow trace
 
 ## Next integration steps
 
-1. Replace the mock planner in `lib/mock-planner.ts` with real provider adapters.
-2. Move the website to call the standalone backend over HTTP instead of importing the service layer directly.
-3. Add Supabase persistence for trip requests and saved plans.
-4. Wire Google Places normalization into the coordinator as the sole place and review provider.
-5. Add auth and share links.
+1. Replace the mock city catalog with Google Places-backed candidate retrieval and review normalization.
+2. Persist workflow state and completed trips in Supabase instead of the in-memory store.
+3. Move the website and mobile clients to a dedicated backend URL only if we outgrow the single-project Vercel setup.
+4. Add auth and share links.
+
+## AI provider env vars
+
+The backend will attempt live structured generation when the matching provider key is present:
+
+```bash
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5-mini
+
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+If a provider key is missing, or a live call fails, that step falls back to the deterministic mock workflow and records the fallback in the stored workflow trace.
+
+## Google Places env vars
+
+The planner will attempt live place retrieval before the dining, activity, and lodging ranking steps when:
+
+```bash
+GOOGLE_PLACES_API_KEY=...
+GOOGLE_PLACES_LANGUAGE_CODE=en
+```
+
+If `GOOGLE_PLACES_API_KEY` is missing, the planner falls back to the in-repo destination catalog and still returns a full trip plan.

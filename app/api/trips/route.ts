@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { createTrip } from "@/backend/src/services/trip-service";
-import type { TripRequest } from "@/lib/types";
+import { tripRequestSchema } from "@/backend/src/domain/trips";
+import { createTripRecord } from "@/lib/server/trip-backend";
+
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as TripRequest;
-  const stored = createTrip(body);
+  const body = await request.json();
+  const parsed = tripRequestSchema.safeParse(body);
 
-  return NextResponse.json({ tripId: stored.id });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid trip request payload." }, { status: 400 });
+  }
+
+  const created = await createTripRecord(parsed.data);
+
+  return NextResponse.json(created);
 }
