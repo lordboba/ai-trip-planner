@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
 export const metadata: Metadata = {
-  title: "Atlas / AI Trip Planner",
-  description: "Website-first skeleton for an AI trip planner with OpenAI and Claude-compatible agents.",
+  title: "Tripwise — AI Trip Planner",
+  description: "AI-powered trip planning with personalized itineraries backed by real reviews.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className={inter.variable}>
+      <body className="bg-cream text-warm-600 font-sans antialiased">
+        {children}
+      </body>
     </html>
   );
 }
