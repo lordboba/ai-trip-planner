@@ -9,6 +9,14 @@ export async function POST(request: Request) {
     return unauthorized;
   }
 
-  const result = await connectGoogleCalendar(request.headers.get("cookie") ?? undefined);
+  const body = (await request.json().catch(() => null)) as {
+    startDate?: string | null;
+    endDate?: string | null;
+  } | null;
+
+  const result = await connectGoogleCalendar(
+    request.headers.get("cookie") ?? undefined,
+    { startDate: body?.startDate ?? null, endDate: body?.endDate ?? null },
+  );
   return NextResponse.json(result);
 }

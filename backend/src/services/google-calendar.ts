@@ -5,7 +5,7 @@ import {
   type ImportedCalendar,
   type NormalizedCalendarEvent,
 } from "../domain/schedule-plans.ts";
-import { inferCalendarCity } from "./calendar-import-service.ts";
+import { filterEventsByDateRange, inferCalendarCity } from "./calendar-import-service.ts";
 
 const googleCalendarDateSchema = z.object({
   date: z.string().optional(),
@@ -25,6 +25,19 @@ const googleCalendarEventSchema = z.object({
 const googleCalendarListEventsSchema = z.object({
   items: z.array(googleCalendarEventSchema).default([]),
   timeZone: z.string().optional(),
+});
+
+const googleCalendarApiErrorSchema = z.object({
+  error: z.object({
+    code: z.number().optional(),
+    message: z.string().optional(),
+    status: z.string().optional(),
+    errors: z.array(z.object({
+      domain: z.string().optional(),
+      reason: z.string().optional(),
+      message: z.string().optional(),
+    })).optional(),
+  }),
 });
 
 const googleEventTypeMatchers: Array<[RegExp, NormalizedCalendarEvent["type"]]> = [
@@ -99,6 +112,40 @@ function normalizeGoogleEvents(events: z.infer<typeof googleCalendarEventSchema>
   return normalized.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
 }
 
+async function formatGoogleCalendarApiError(response: Response) {
+  const text = await response.text();
+  const payload = (() => {
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  })();
+  const parsed = googleCalendarApiErrorSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return `Google Calendar events request failed with status ${response.status}.`;
+  }
+
+  const apiError = parsed.data.error;
+  const reason = apiError.errors?.[0]?.reason ?? null;
+  const message = apiError.message?.trim() || apiError.errors?.[0]?.message?.trim() || null;
+
+  if (reason === "insufficientPermissions") {
+    return "Google Calendar permissions are insufficient. Reconnect Google Calendar and approve calendar read access.";
+  }
+
+  if (reason === "accessNotConfigured" || apiError.status === "PERMISSION_DENIED") {
+    return "Google Calendar API is not enabled for this Google Cloud project. Enable the Google Calendar API and try again.";
+  }
+
+  return message
+    ? `Google Calendar request failed: ${message}`
+    : `Google Calendar events request failed with status ${response.status}.`;
+}
+
 export async function importCalendarFromGoogleEvents(input: {
   accessToken: string;
   startDate?: string | null;
@@ -127,19 +174,20 @@ export async function importCalendarFromGoogleEvents(input: {
   });
 
   if (!response.ok) {
-    throw new Error(`Google Calendar events request failed with status ${response.status}.`);
+    throw new Error(await formatGoogleCalendarApiError(response));
   }
 
   const payload = googleCalendarListEventsSchema.parse(await response.json());
   const normalizedEvents = normalizeGoogleEvents(payload.items);
-  const cityInference = inferCalendarCity(normalizedEvents);
+  const filteredEvents = filterEventsByDateRange(normalizedEvents, startDate, endDate);
+  const cityInference = inferCalendarCity(filteredEvents);
 
   return importedCalendarSchema.parse({
     source: "google",
     importedAt: new Date().toISOString(),
     timezone: payload.timeZone ?? null,
     cityInference,
-    warnings: normalizedEvents.length === 0 ? ["No Google Calendar events were found for the selected date range."] : [],
-    events: normalizedEvents,
+    warnings: filteredEvents.length === 0 ? ["No Google Calendar events were found for the selected date range."] : [],
+    events: filteredEvents,
   });
 }

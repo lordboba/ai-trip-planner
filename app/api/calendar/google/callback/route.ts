@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { exchangeGoogleCodeForTokens } from "@/lib/server/google-calendar-auth";
+import {
+  consumeGooglePendingImportDateRange,
+  exchangeGoogleCodeForTokens,
+} from "@/lib/server/google-calendar-auth";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -7,13 +10,23 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/?googleCalendar=error", url));
+    await consumeGooglePendingImportDateRange();
+    return NextResponse.redirect(new URL("/plan?googleCalendar=error", url));
   }
 
   try {
     await exchangeGoogleCodeForTokens({ code, state });
-    return NextResponse.redirect(new URL("/?googleCalendar=connected", url));
+    const redirectUrl = new URL("/plan?googleCalendar=connected", url);
+    const pendingRange = await consumeGooglePendingImportDateRange();
+
+    if (pendingRange.startDate && pendingRange.endDate) {
+      redirectUrl.searchParams.set("startDate", pendingRange.startDate);
+      redirectUrl.searchParams.set("endDate", pendingRange.endDate);
+    }
+
+    return NextResponse.redirect(redirectUrl);
   } catch {
-    return NextResponse.redirect(new URL("/?googleCalendar=error", url));
+    await consumeGooglePendingImportDateRange();
+    return NextResponse.redirect(new URL("/plan?googleCalendar=error", url));
   }
 }

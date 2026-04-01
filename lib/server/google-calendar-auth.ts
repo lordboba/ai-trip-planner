@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 const GOOGLE_OAUTH_STATE_COOKIE_NAME = "tripwise-google-oauth-state";
 const GOOGLE_ACCESS_TOKEN_COOKIE_NAME = "tripwise-google-access-token";
 const GOOGLE_REFRESH_TOKEN_COOKIE_NAME = "tripwise-google-refresh-token";
+const GOOGLE_PENDING_START_DATE_COOKIE_NAME = "tripwise-google-pending-start-date";
+const GOOGLE_PENDING_END_DATE_COOKIE_NAME = "tripwise-google-pending-end-date";
 
 function getGoogleClientId() {
   return process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "";
@@ -26,22 +28,38 @@ function randomHex(bytes: number) {
   return Array.from(array).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createGoogleAuthorizeUrl() {
+function isIsoDate(value: string | null | undefined): value is string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "");
+}
+
+function buildShortLivedCookie(name: string, value: string) {
+  return {
+    name,
+    value,
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 10,
+  };
+}
+
+export async function createGoogleAuthorizeUrl(input?: { startDate?: string | null; endDate?: string | null }) {
   if (!isGoogleOauthConfigured()) {
     throw new Error("Google OAuth is not configured.");
   }
 
   const state = randomHex(24);
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: GOOGLE_OAUTH_STATE_COOKIE_NAME,
-    value: state,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 10,
-  });
+  cookieStore.set(buildShortLivedCookie(GOOGLE_OAUTH_STATE_COOKIE_NAME, state));
+
+  if (isIsoDate(input?.startDate) && isIsoDate(input?.endDate) && input.startDate <= input.endDate) {
+    cookieStore.set(buildShortLivedCookie(GOOGLE_PENDING_START_DATE_COOKIE_NAME, input.startDate));
+    cookieStore.set(buildShortLivedCookie(GOOGLE_PENDING_END_DATE_COOKIE_NAME, input.endDate));
+  } else {
+    cookieStore.delete(GOOGLE_PENDING_START_DATE_COOKIE_NAME);
+    cookieStore.delete(GOOGLE_PENDING_END_DATE_COOKIE_NAME);
+  }
 
   const params = new URLSearchParams({
     client_id: getGoogleClientId(),
@@ -126,4 +144,19 @@ export async function exchangeGoogleCodeForTokens(input: { code: string; state: 
 export async function getGoogleAccessTokenFromCookies() {
   const cookieStore = await cookies();
   return cookieStore.get(GOOGLE_ACCESS_TOKEN_COOKIE_NAME)?.value ?? null;
+}
+
+export async function consumeGooglePendingImportDateRange() {
+  const cookieStore = await cookies();
+  const startDate = cookieStore.get(GOOGLE_PENDING_START_DATE_COOKIE_NAME)?.value ?? null;
+  const endDate = cookieStore.get(GOOGLE_PENDING_END_DATE_COOKIE_NAME)?.value ?? null;
+
+  cookieStore.delete(GOOGLE_PENDING_START_DATE_COOKIE_NAME);
+  cookieStore.delete(GOOGLE_PENDING_END_DATE_COOKIE_NAME);
+
+  if (!isIsoDate(startDate) || !isIsoDate(endDate) || startDate > endDate) {
+    return { startDate: null, endDate: null };
+  }
+
+  return { startDate, endDate };
 }

@@ -158,11 +158,14 @@ export async function addSuggestionToSchedulePlanRecord(planId: string, suggesti
   return schedulePlanSchema.parse(await response.json());
 }
 
-export async function connectGoogleCalendar(requestCookieHeader?: string) {
+export async function connectGoogleCalendar(
+  requestCookieHeader?: string,
+  input?: { startDate?: string | null; endDate?: string | null },
+) {
   const backendUrl = getBackendUrl();
 
   if (!backendUrl) {
-    const authorizeUrl = await createGoogleAuthorizeUrl();
+    const authorizeUrl = await createGoogleAuthorizeUrl(input);
 
     return googleConnectResponseSchema.parse({
       ok: true,
@@ -175,7 +178,14 @@ export async function connectGoogleCalendar(requestCookieHeader?: string) {
 
   const response = await fetch(`${backendUrl}/api/calendar/google/connect`, {
     method: "POST",
-    headers: requestCookieHeader ? { cookie: requestCookieHeader } : undefined,
+    headers: {
+      "Content-Type": "application/json",
+      ...(requestCookieHeader ? { cookie: requestCookieHeader } : {}),
+    },
+    body: JSON.stringify({
+      startDate: input?.startDate ?? null,
+      endDate: input?.endDate ?? null,
+    }),
     cache: "no-store",
   });
 

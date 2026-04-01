@@ -351,7 +351,7 @@ export function inferCalendarCity(events: readonly NormalizedCalendarEvent[]) {
   );
 }
 
-function filterEventsByDateRange(
+export function filterEventsByDateRange(
   events: readonly NormalizedCalendarEvent[],
   startDate: string | null,
   endDate: string | null,

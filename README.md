@@ -98,6 +98,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
 ```
 
 In Google Cloud Console, set the authorized redirect URI to match `GOOGLE_OAUTH_REDIRECT_URI` exactly.
+Also enable the Google Calendar API for the same Google Cloud project that owns the OAuth client.
 
 ## Next integration steps
 

@@ -85,12 +85,16 @@ export function PlannerShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const googleCalendarState = searchParams.get("googleCalendar");
+  const googleCalendarStartDate = searchParams.get("startDate");
+  const googleCalendarEndDate = searchParams.get("endDate");
 
   /* ---- Calendar state ---- */
   const [calendarFile, setCalendarFile] = useState<File | null>(null);
   const [importedCalendar, setImportedCalendar] = useState<ImportedCalendar | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<string | null>(null);
 
   /* ---- Core fields ---- */
@@ -125,9 +129,21 @@ export function PlannerShell() {
     [importedCalendar, startDate, endDate],
   );
 
+  const resetImportedCalendar = useCallback(() => {
+    setImportedCalendar(null);
+    setCalendarFile(null);
+    setCalendarError(null);
+    setGoogleStatus(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, []);
+
   /* ---- Import ICS file ---- */
   const importIcs = useCallback(async (file: File) => {
     setCalendarError(null);
+    setGoogleStatus(null);
     setIsImporting(true);
     setImportedCalendar(null);
 
@@ -149,17 +165,6 @@ export function PlannerShell() {
 
       const imported = (await res.json()) as ImportedCalendar;
       setImportedCalendar(imported);
-
-      // Auto-fill dates from calendar if available
-      if (imported.events.length > 0) {
-        const sorted = [...imported.events].sort(
-          (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-        );
-        const first = sorted[0].startsAt.slice(0, 10);
-        const last = sorted[sorted.length - 1].endsAt.slice(0, 10);
-        setStartDate(first);
-        setEndDate(last);
-      }
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : "Calendar import failed.");
     } finally {
@@ -171,9 +176,14 @@ export function PlannerShell() {
   const connectGoogle = useCallback(async () => {
     setCalendarError(null);
     setGoogleStatus(null);
+    setIsConnecting(true);
 
     try {
-      const res = await fetch("/api/calendar/google/connect", { method: "POST" });
+      const res = await fetch("/api/calendar/google/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startDate, endDate }),
+      });
       if (!res.ok) throw new Error("Google Calendar connection failed.");
       const data = (await res.json()) as { message?: string; authorizeUrl?: string };
 
@@ -185,22 +195,43 @@ export function PlannerShell() {
       setGoogleStatus(data.message ?? "Connected.");
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : "Google Calendar connection failed.");
+    } finally {
+      setIsConnecting(false);
     }
-  }, []);
+  }, [endDate, startDate]);
 
 
 
   useEffect(() => {
-    const googleState = searchParams.get("googleCalendar");
-
-    if (googleState === "error") {
+    if (googleCalendarState === "error") {
       setCalendarError("Google Calendar authentication failed. Please try connecting again.");
+      setGoogleStatus(null);
+      router.replace("/plan");
       return;
     }
 
-    if (googleState !== "connected") {
+    if (googleCalendarState !== "connected") {
       return;
     }
+
+    const selectedStartDate =
+      datesValid(googleCalendarStartDate ?? "", googleCalendarEndDate ?? "")
+        ? (googleCalendarStartDate as string)
+        : startDate;
+    const selectedEndDate =
+      datesValid(googleCalendarStartDate ?? "", googleCalendarEndDate ?? "")
+        ? (googleCalendarEndDate as string)
+        : endDate;
+
+    if (selectedStartDate !== startDate) {
+      setStartDate(selectedStartDate);
+    }
+
+    if (selectedEndDate !== endDate) {
+      setEndDate(selectedEndDate);
+    }
+
+    router.replace("/plan");
 
     const importGoogle = async () => {
       setCalendarError(null);
@@ -210,7 +241,7 @@ export function PlannerShell() {
         const res = await fetch("/api/calendar/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source: "google", startDate, endDate }),
+          body: JSON.stringify({ source: "google", startDate: selectedStartDate, endDate: selectedEndDate }),
         });
 
         if (!res.ok) {
@@ -221,20 +252,24 @@ export function PlannerShell() {
         const imported = (await res.json()) as ImportedCalendar;
         setImportedCalendar(imported);
         setGoogleStatus(`Connected. Imported ${imported.events.length} Google Calendar events.`);
-
-        if (imported.events.length > 0) {
-          const sorted = [...imported.events].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-          setStartDate(sorted[0].startsAt.slice(0, 10));
-          setEndDate(sorted[sorted.length - 1].endsAt.slice(0, 10));
-        }
       } catch (err) {
         setCalendarError(err instanceof Error ? err.message : "Google Calendar import failed.");
       }
     };
 
     void importGoogle();
-    router.replace("/");
-  }, [endDate, router, searchParams, startDate]);
+  }, [googleCalendarEndDate, googleCalendarStartDate, googleCalendarState, router]);
+
+  const handleStartDateChange = useCallback((value: string) => {
+    setStartDate(value);
+    resetImportedCalendar();
+  }, [resetImportedCalendar]);
+
+  const handleEndDateChange = useCallback((value: string) => {
+    setEndDate(value);
+    resetImportedCalendar();
+  }, [resetImportedCalendar]);
+
   /* ---- Generate plan ---- */
   function generate() {
     if (!importedCalendar) return;
@@ -347,7 +382,7 @@ export function PlannerShell() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isImporting}
+                disabled={isImporting || !datesValid(startDate, endDate)}
                 className="w-full rounded-xl border-2 border-dashed border-warm-100 bg-warm-50 px-4 py-6 text-center transition-colors hover:border-coral/40 hover:bg-coral-wash disabled:opacity-50"
               >
                 {isImporting ? (
@@ -375,9 +410,10 @@ export function PlannerShell() {
               <button
                 type="button"
                 onClick={connectGoogle}
+                disabled={isConnecting || !datesValid(startDate, endDate)}
                 className="w-full rounded-xl border border-warm-100 bg-white px-4 py-3 text-sm font-semibold text-warm-900 transition-colors hover:border-coral/40 hover:bg-coral-wash"
               >
-                Connect Google Calendar
+                {isConnecting ? "Connecting Google Calendar..." : "Connect Google Calendar"}
               </button>
 
               {googleStatus && (
@@ -398,12 +434,7 @@ export function PlannerShell() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setImportedCalendar(null);
-                    setCalendarFile(null);
-                    setCalendarError(null);
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
+                  onClick={resetImportedCalendar}
                   className="shrink-0 text-xs font-semibold text-coral hover:text-coral-deep"
                 >
                   Remove
@@ -425,7 +456,7 @@ export function PlannerShell() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
                 className={inputClasses}
                 aria-label="Start date"
               />
@@ -435,7 +466,7 @@ export function PlannerShell() {
                 type="date"
                 value={endDate}
                 min={startDate || undefined}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => handleEndDateChange(e.target.value)}
                 className={inputClasses}
                 aria-label="End date"
               />

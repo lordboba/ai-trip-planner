@@ -53,41 +53,47 @@ async function readCalendarImportInput(request: Request): Promise<CalendarImport
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
-  const unauthorized = await requireApiAccess();
+  try {
+    const unauthorized = await requireApiAccess();
 
-  if (unauthorized) {
-    return unauthorized;
-  }
+    if (unauthorized) {
+      return unauthorized;
+    }
 
-  const { icsText, startDate, endDate, source } = await readCalendarImportInput(request);
+    const { icsText, startDate, endDate, source } = await readCalendarImportInput(request);
 
-  if (source === "ics" && !icsText) {
-    return NextResponse.json(
-      { error: "Upload an .ics file or send calendar text in the request body." },
-      { status: 400 },
-    );
-  }
-
-  if (source === "google") {
-    const googleAccessToken = await getGoogleAccessTokenFromCookies();
-
-    if (!googleAccessToken) {
+    if (source === "ics" && !icsText) {
       return NextResponse.json(
-        { error: "Google Calendar is not connected. Connect your Google account first." },
-        { status: 401 },
+        { error: "Upload an .ics file or send calendar text in the request body." },
+        { status: 400 },
       );
     }
 
-    const imported = await importCalendarFile({
-      source,
-      startDate,
-      endDate,
-      googleAccessToken,
-    });
+    if (source === "google") {
+      const googleAccessToken = await getGoogleAccessTokenFromCookies();
 
+      if (!googleAccessToken) {
+        return NextResponse.json(
+          { error: "Google Calendar is not connected. Connect your Google account first." },
+          { status: 401 },
+        );
+      }
+
+      const imported = await importCalendarFile({
+        source,
+        startDate,
+        endDate,
+        googleAccessToken,
+      });
+
+      return NextResponse.json(imported);
+    }
+
+    const imported = await importCalendarFile({ icsText: icsText ?? undefined, source, startDate, endDate });
     return NextResponse.json(imported);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Calendar import failed.";
+    const status = message.toLowerCase().includes("google calendar") ? 502 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
-
-  const imported = await importCalendarFile({ icsText: icsText ?? undefined, source, startDate, endDate });
-  return NextResponse.json(imported);
 }
