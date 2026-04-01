@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE_NAME, hasValidAccessCookie, isAccessGateEnabled } from "@/lib/access-gate";
+import {
+  ACCESS_COOKIE_NAME,
+  hasValidAccessCookie,
+  isAccessGateEnabled,
+} from "@/lib/access-gate";
 
 function isPublicPath(pathname: string) {
   if (pathname === "/") {
@@ -21,7 +25,7 @@ function isApiPath(pathname: string) {
   return pathname.startsWith("/api/");
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   if (!isAccessGateEnabled() || isPublicPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }

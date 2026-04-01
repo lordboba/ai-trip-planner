@@ -103,6 +103,10 @@ function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
 
+function datesValid(startDate: string, endDate: string) {
+  return startDate !== "" && endDate !== "" && endDate >= startDate;
+}
+
 const slideVariants = {
   enter: (direction: number) => ({ x: direction > 0 ? 200 : -200, opacity: 0, scale: 0.97 }),
   center: { x: 0, opacity: 1, scale: 1 },
@@ -157,7 +161,7 @@ export function PlannerShell() {
 
   const canContinue = useMemo(() => {
     if (stepIndex === 0) return Boolean(form.provider && form.tripType);
-    if (stepIndex === 1) return Boolean(form.startDate && form.endDate && form.destinationIntent);
+    if (stepIndex === 1) return datesValid(form.startDate, form.endDate) && Boolean(form.destinationIntent);
     if (stepIndex === 2) return form.interests.length > 0;
     return true;
   }, [form, stepIndex]);
@@ -289,6 +293,10 @@ export function PlannerShell() {
     });
   }
 
+  function handleDateChange(field: "startDate" | "endDate", value: string) {
+    setForm((c) => ({ ...c, [field]: value }));
+  }
+
   return (
     <div className="w-full max-w-lg">
       {savedTrips.length > 0 && (
@@ -378,13 +386,16 @@ export function PlannerShell() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="startDate" className={labelClasses}>Start date</label>
-                      <input id="startDate" type="date" value={form.startDate} onChange={(e) => setForm((c) => ({ ...c, startDate: e.target.value }))} className={inputClasses} />
+                      <input id="startDate" type="date" value={form.startDate} onChange={(e) => handleDateChange("startDate", e.target.value)} className={inputClasses} />
                     </div>
                     <div>
                       <label htmlFor="endDate" className={labelClasses}>End date</label>
-                      <input id="endDate" type="date" value={form.endDate} onChange={(e) => setForm((c) => ({ ...c, endDate: e.target.value }))} className={inputClasses} />
+                      <input id="endDate" type="date" value={form.endDate} min={form.startDate || undefined} onChange={(e) => handleDateChange("endDate", e.target.value)} className={inputClasses} />
                     </div>
                   </div>
+                  {form.startDate && form.endDate && form.endDate < form.startDate && (
+                    <p className="text-red-500 text-xs mt-1">End date must be on or after start date.</p>
+                  )}
                   <div>
                     <label htmlFor="dateFlexibility" className={labelClasses}>Date flexibility</label>
                     <textarea id="dateFlexibility" rows={2} value={form.dateFlexibility} onChange={(e) => setForm((c) => ({ ...c, dateFlexibility: e.target.value }))} className={`${inputClasses} resize-none`} />
