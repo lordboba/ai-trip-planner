@@ -1,8 +1,8 @@
-# AI Trip Planner Website Skeleton
+# AI Trip Planner
 
 Website-first MVP skeleton for the trip planner described in [planning.md](./planning.md).
 
-The repo now also includes a standalone backend component under [`backend/src`](./backend/src) so the future mobile client and the website can share the same trip API surface.
+The repo includes a standalone backend component under [`backend/src`](./backend/src) so the website and any future client can share the same schedule-planning API surface.
 
 For deployment, the intended phase-one setup is a single Vercel project: the Next.js frontend and the API routes ship together, while the backend workflow logic remains isolated under `backend/src`.
 
@@ -61,10 +61,11 @@ pnpm backend:dev
 The backend listens on `http://localhost:8787` by default and exposes:
 
 - `GET /healthz`
-- `POST /api/trips`
-- `GET /api/trips/:tripId`
+- `POST /api/schedule-plans`
+- `GET /api/schedule-plans/:planId`
+- `POST /api/schedule-plans/:planId/suggestions/:suggestionId/add`
 
-The Next.js API routes and trip pages now go through a backend adapter. With no `BACKEND_URL`, they call the backend service layer in-process. If `BACKEND_URL` is set, they switch to HTTP calls against that external backend without changing the UI code.
+The Next.js API routes go through a backend adapter. With no `BACKEND_URL`, they call the backend service layer in-process. If `BACKEND_URL` is set, schedule-plan creation, fetch, and suggestion-add switch to HTTP calls against that external backend without changing the UI code.
 
 ## Vercel deployment shape
 
@@ -76,15 +77,13 @@ The Next.js API routes and trip pages now go through a backend adapter. With no 
 ## Current flow
 
 - Landing page with a designed website-first pitch
-- Long-onboarding planner shell
+- Schedule-first planner shell with Google Calendar or `.ics` import
 - Provider selector for OpenAI vs Claude
-- Live-or-mock end-to-end `POST /api/trips` generation flow
+- Live-or-fallback `POST /api/schedule-plans` generation flow
 - Google Places-powered destination autocomplete in onboarding
-- Internal map embed route for destination and trip map previews
-- Results page backed by typed trip contracts and an in-memory store
-- Browser-local saved trip snapshots, available from the planner even after refresh
-- Standalone backend server with the same trip creation and fetch endpoints
-- Structured workflow orchestration with validated step outputs, direct OpenAI/Claude backend calls, and a stored workflow trace
+- Timeline-first results page backed by typed schedule-plan contracts and an in-memory store
+- Standalone backend server with the same schedule-plan creation, fetch, and add-suggestion endpoints
+- Structured dining, itinerary, and budget workflow orchestration with validated step outputs and stored workflow metadata
 
 
 ## Google Calendar OAuth env vars
@@ -102,8 +101,8 @@ Also enable the Google Calendar API for the same Google Cloud project that owns 
 
 ## Next integration steps
 
-1. Replace the mock city catalog with Google Places-backed candidate retrieval and review normalization.
-2. Persist workflow state and completed trips in Supabase instead of the in-memory store.
+1. Persist schedule plans in a real database instead of the in-memory store.
+2. Add richer route-aware ranking using event locations and map distance signals.
 3. Move the website and mobile clients to a dedicated backend URL only if we outgrow the single-project Vercel setup.
 4. Add auth and share links.
 
@@ -119,7 +118,7 @@ ANTHROPIC_API_KEY=...
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ```
 
-If a provider key is missing, or a live call fails, that step falls back to the deterministic mock workflow and records the fallback in the stored workflow trace.
+If a provider key is missing, or a live call fails, each agent step falls back to deterministic schedule-planning logic and records the fallback in workflow metadata.
 
 ## Google Places env vars
 
@@ -130,4 +129,4 @@ GOOGLE_PLACES_API_KEY=...
 GOOGLE_PLACES_LANGUAGE_CODE=en
 ```
 
-If `GOOGLE_PLACES_API_KEY` is missing, the planner falls back to the in-repo destination catalog and still returns a full trip plan.
+If `GOOGLE_PLACES_API_KEY` is missing, the planner falls back to deterministic place candidates and still returns a full schedule plan.

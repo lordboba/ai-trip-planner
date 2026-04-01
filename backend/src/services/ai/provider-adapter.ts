@@ -1,9 +1,9 @@
 import type { ZodType } from "zod";
-import type { LLMProvider, TripRequest, WorkflowStep } from "../../domain/trips.ts";
+import type { LLMProvider } from "../../domain/planning.ts";
 
 export interface StepGenerationInput {
-  request: TripRequest;
-  step: WorkflowStep;
+  provider: LLMProvider;
+  step: string;
   systemPrompt: string;
   userPrompt: string;
   schemaName: string;

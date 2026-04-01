@@ -1,14 +1,13 @@
 import { z } from "zod";
-import { importedCalendarSchema, schedulePlanSchema, schedulePlanRequestSchema } from "@/backend/src/domain/schedule-plans";
-import { importCalendarFromIcsText } from "@/backend/src/services/calendar-import-service";
-import { importCalendarFromGoogleEvents } from "@/backend/src/services/google-calendar";
-import { createGoogleAuthorizeUrl } from "@/lib/server/google-calendar-auth";
+import { schedulePlanSchema, schedulePlanRequestSchema } from "../../backend/src/domain/schedule-plans.ts";
+import { importCalendarFromIcsText } from "../../backend/src/services/calendar-import-service.ts";
+import { importCalendarFromGoogleEvents } from "../../backend/src/services/google-calendar.ts";
 import {
   addSuggestionToSchedulePlan,
   createSchedulePlan,
   getSchedulePlanById,
-} from "@/backend/src/services/schedule-plan-service";
-import type { ImportedCalendar, SchedulePlan, SchedulePlanRequest } from "@/lib/types";
+} from "../../backend/src/services/schedule-plan-service.ts";
+import type { SchedulePlan, SchedulePlanRequest } from "../types.ts";
 
 const createSchedulePlanResponseSchema = z.object({
   planId: z.string().uuid(),
@@ -39,52 +38,28 @@ export async function importCalendarFile(input: {
   endDate?: string | null;
   googleAccessToken?: string | null;
 }) {
-  const backendUrl = getBackendUrl();
-
-  if (!backendUrl) {
-    if (input.source === "google") {
-      if (!input.googleAccessToken) {
-        throw new Error("Google Calendar access token is missing.");
-      }
-
-      return importCalendarFromGoogleEvents({
-        accessToken: input.googleAccessToken,
-        startDate: input.startDate,
-        endDate: input.endDate,
-      });
+  if (input.source === "google") {
+    if (!input.googleAccessToken) {
+      throw new Error("Google Calendar access token is missing.");
     }
 
-    if (!input.icsText) {
-      throw new Error("ICS content is required for non-Google calendar imports.");
-    }
-
-    return importCalendarFromIcsText({
-      icsText: input.icsText,
-      source: input.source,
+    return importCalendarFromGoogleEvents({
+      accessToken: input.googleAccessToken,
       startDate: input.startDate,
       endDate: input.endDate,
     });
   }
 
-  const response = await fetch(`${backendUrl}/api/calendar/import`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ics: input.icsText ?? null,
-      source: input.source ?? "ics",
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-    }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`External backend calendar import failed with status ${response.status}.`);
+  if (!input.icsText) {
+    throw new Error("ICS content is required for non-Google calendar imports.");
   }
 
-  return importedCalendarSchema.parse(await response.json());
+  return importCalendarFromIcsText({
+    icsText: input.icsText,
+    source: input.source,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
 }
 
 export async function createSchedulePlanRecord(request: SchedulePlanRequest) {
@@ -159,39 +134,16 @@ export async function addSuggestionToSchedulePlanRecord(planId: string, suggesti
 }
 
 export async function connectGoogleCalendar(
-  requestCookieHeader?: string,
   input?: { startDate?: string | null; endDate?: string | null },
 ) {
-  const backendUrl = getBackendUrl();
+  const { createGoogleAuthorizeUrl } = await import("./google-calendar-auth.ts");
+  const authorizeUrl = await createGoogleAuthorizeUrl(input);
 
-  if (!backendUrl) {
-    const authorizeUrl = await createGoogleAuthorizeUrl(input);
-
-    return googleConnectResponseSchema.parse({
-      ok: true,
-      provider: "google-calendar",
-      status: "ready",
-      message: "Google Calendar OAuth is ready.",
-      authorizeUrl,
-    });
-  }
-
-  const response = await fetch(`${backendUrl}/api/calendar/google/connect`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(requestCookieHeader ? { cookie: requestCookieHeader } : {}),
-    },
-    body: JSON.stringify({
-      startDate: input?.startDate ?? null,
-      endDate: input?.endDate ?? null,
-    }),
-    cache: "no-store",
+  return googleConnectResponseSchema.parse({
+    ok: true,
+    provider: "google-calendar",
+    status: "ready",
+    message: "Google Calendar OAuth is ready.",
+    authorizeUrl,
   });
-
-  if (!response.ok) {
-    throw new Error(`External backend Google connect handshake failed with status ${response.status}.`);
-  }
-
-  return googleConnectResponseSchema.parse(await response.json());
 }

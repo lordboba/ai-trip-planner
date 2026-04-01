@@ -103,6 +103,9 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                 {plan.request.preferences.provider === "openai" ? "OpenAI" : "Claude"}
               </span>
               <span className="rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/82">
+                {plan.generation.live ? `Live ${plan.generation.model}` : "Deterministic fallback"}
+              </span>
+              <span className="rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/82">
                 {plan.request.preferences.transport}
               </span>
             </div>
@@ -125,6 +128,9 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                 </span>
                 <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/82">
                   {pendingSuggestions.length} pending suggestions
+                </span>
+                <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/82">
+                  {plan.workflow.steps.length} agent steps
                 </span>
                 <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/82">
                   {plan.request.preferences.earliestTime} to {plan.request.preferences.latestTime}
@@ -225,7 +231,13 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-coral">Suggested stop</p>
                           <h3 className="mt-1 text-sm font-bold text-warm-900">{item.suggestion.title}</h3>
                           <p className="mt-1 text-xs font-semibold text-warm-400">{item.suggestion.subtitle}</p>
+                          <p className="mt-3 text-sm font-semibold text-warm-900">{item.suggestion.place.name}</p>
+                          <p className="mt-1 text-xs text-warm-400">
+                            {item.suggestion.place.address ?? "Address unavailable"}
+                          </p>
                           <p className="mt-3 text-sm leading-6 text-warm-400">{item.suggestion.message}</p>
+                          <p className="mt-3 text-xs leading-5 text-warm-500">{item.suggestion.agentReason}</p>
+                          <p className="mt-2 text-xs leading-5 text-warm-500">{item.suggestion.budgetReason}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <span className="rounded-full border border-coral/15 bg-white px-3 py-1.5 text-xs font-semibold text-coral-deep">
                               {item.suggestion.estimatedCost}
@@ -235,6 +247,9 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                             </span>
                             <span className="rounded-full border border-coral/15 bg-white px-3 py-1.5 text-xs font-semibold text-coral-deep">
                               {item.suggestion.category}
+                            </span>
+                            <span className="rounded-full border border-coral/15 bg-white px-3 py-1.5 text-xs font-semibold text-coral-deep">
+                              ⭐ {item.suggestion.place.rating.toFixed(1)}
                             </span>
                           </div>
                         </div>
@@ -248,6 +263,16 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                             )}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-warm-400">{item.suggestion.transitNote}</p>
+                          {item.suggestion.place.googleMapsUri && (
+                            <a
+                              href={item.suggestion.place.googleMapsUri}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-block text-xs font-semibold text-coral transition-colors hover:text-coral-deep"
+                            >
+                              Open map
+                            </a>
+                          )}
                           <button
                             type="button"
                             onClick={() => addSuggestion(item.suggestion.id)}
@@ -267,6 +292,27 @@ export function SchedulePlanResults({ initialPlan }: Props) {
         </section>
 
         <aside className="space-y-5">
+          <div className="rounded-[1.75rem] border border-warm-100 bg-white p-5 shadow-[0_24px_70px_rgba(26,22,20,0.08)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-coral">Generation</p>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-2xl border border-warm-100 bg-cream p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-warm-400">Mode</p>
+                <p className="mt-2 text-sm font-bold text-warm-900">
+                  {plan.generation.live ? `Live ${plan.generation.model}` : "Deterministic fallback"}
+                </p>
+                <p className="mt-1 text-xs text-warm-400">
+                  {plan.generation.fallbackReason ?? "All agent steps completed with provider output."}
+                </p>
+              </div>
+              {plan.workflow.steps.map((step) => (
+                <div key={step.step} className="rounded-2xl border border-warm-100 bg-cream p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-warm-400">{step.step}</p>
+                  <p className="mt-2 text-sm font-bold text-warm-900">{step.summary}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[1.75rem] border border-warm-100 bg-white p-5 shadow-[0_24px_70px_rgba(26,22,20,0.08)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-coral">Trip context</p>
             <div className="mt-4 space-y-3">

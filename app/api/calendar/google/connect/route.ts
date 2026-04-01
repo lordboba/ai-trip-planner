@@ -14,9 +14,9 @@ export async function POST(request: Request) {
     endDate?: string | null;
   } | null;
 
-  const result = await connectGoogleCalendar(
-    request.headers.get("cookie") ?? undefined,
-    { startDate: body?.startDate ?? null, endDate: body?.endDate ?? null },
-  );
+  const result = await connectGoogleCalendar({
+    startDate: body?.startDate ?? null,
+    endDate: body?.endDate ?? null,
+  });
   return NextResponse.json(result);
 }

@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createTrip, getTripById } from "./services/trip-service.ts";
-import { tripRequestSchema } from "./domain/trips.ts";
+import { schedulePlanRequestSchema } from "./domain/schedule-plans.ts";
+import {
+  addSuggestionToSchedulePlan,
+  createSchedulePlan,
+  getSchedulePlanById,
+} from "./services/schedule-plan-service.ts";
 
 function sendJson(response: ServerResponse, statusCode: number, payload: unknown) {
   response.writeHead(statusCode, {
@@ -51,35 +55,52 @@ async function handler(request: IncomingMessage, response: ServerResponse) {
     return;
   }
 
-  if (method === "POST" && pathname === "/api/trips") {
+  if (method === "POST" && pathname === "/api/schedule-plans") {
     try {
       const body = await readJson<unknown>(request);
-      const parsed = tripRequestSchema.safeParse(body);
+      const parsed = schedulePlanRequestSchema.safeParse(body);
 
       if (!parsed.success) {
-        sendJson(response, 400, { error: "Invalid trip request payload." });
+        sendJson(response, 400, { error: "Invalid schedule plan payload." });
         return;
       }
 
-      const stored = await createTrip(parsed.data);
-      sendJson(response, 201, { tripId: stored.id });
+      const stored = await createSchedulePlan(parsed.data);
+      sendJson(response, 201, { planId: stored.id });
     } catch {
       sendJson(response, 400, { error: "Unable to parse JSON body." });
     }
     return;
   }
 
-  if (method === "GET" && pathname.startsWith("/api/trips/")) {
-    const tripId = pathname.slice("/api/trips/".length);
-    const stored = getTripById(tripId);
+  if (method === "GET" && pathname.startsWith("/api/schedule-plans/")) {
+    const suffix = pathname.slice("/api/schedule-plans/".length);
+    const stored = getSchedulePlanById(suffix);
 
     if (!stored) {
-      sendJson(response, 404, { error: "Trip not found" });
+      sendJson(response, 404, { error: "Schedule plan not found" });
       return;
     }
 
     sendJson(response, 200, stored);
     return;
+  }
+
+  if (method === "POST" && pathname.startsWith("/api/schedule-plans/")) {
+    const match = pathname.slice("/api/schedule-plans/".length).match(/^([^/]+)\/suggestions\/([^/]+)\/add$/);
+
+    if (match) {
+      const [, planId, suggestionId] = match;
+      const updated = await addSuggestionToSchedulePlan(planId, suggestionId);
+
+      if (!updated) {
+        sendJson(response, 404, { error: "Schedule plan or suggestion was not found." });
+        return;
+      }
+
+      sendJson(response, 200, updated);
+      return;
+    }
   }
 
   sendJson(response, 404, { error: "Route not found" });

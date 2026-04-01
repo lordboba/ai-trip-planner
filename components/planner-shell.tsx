@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getSavedTrips, type SavedTripSnapshot } from "@/lib/browser-saved-trips";
 import {
   DEFAULT_PLANNING_EARLIEST_TIME,
   DEFAULT_PLANNING_LATEST_TIME,
@@ -139,12 +138,6 @@ export function PlannerShell({
   /* ---- Submission ---- */
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  /* ---- Saved trips ---- */
-  const [savedTrips] = useState<SavedTripSnapshot[]>(() => {
-    if (typeof window === "undefined") return [];
-    return getSavedTrips();
-  });
 
   /* ---- Derived city label ---- */
   const inferredCity = importedCalendar?.cityInference?.city ?? null;
@@ -342,43 +335,6 @@ export function PlannerShell({
 
   return (
     <div className="w-full max-w-lg">
-      {/* Saved trips */}
-      {savedTrips.length > 0 && (
-        <div className="mb-5 rounded-2xl border border-warm-600 bg-warm-800/70 p-4 text-white shadow-[0_18px_50px_rgba(26,22,20,0.18)]">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-coral-light">
-                Saved in this browser
-              </p>
-              <h2 className="mt-1 text-sm font-bold">Recent trip outputs</h2>
-            </div>
-            <p className="text-[11px] text-white/55">{savedTrips.length} stored locally</p>
-          </div>
-          <div className="space-y-2">
-            {savedTrips.slice(0, 3).map((trip) => (
-              <button
-                key={trip.id}
-                type="button"
-                onClick={() => router.push(`/trip/local/${trip.id}`)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">
-                    {trip.plan.destinationSummary.title}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-white/60">
-                    {trip.request.travelerProfile.startDate} to{" "}
-                    {trip.request.travelerProfile.endDate} ·{" "}
-                    {trip.request.travelerProfile.budgetBand}
-                  </p>
-                </div>
-                <span className="shrink-0 text-xs font-semibold text-coral-light">Open</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Main card */}
       <div className="bg-cream rounded-2xl shadow-xl p-6 md:p-8">
         <h2 className="text-xl font-extrabold text-warm-900 mb-1">Drop your schedule</h2>

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { PlaceCandidate, TravelerProfile } from "../domain/trips.ts";
+import type { BudgetBand, PlaceCandidate } from "../domain/planning.ts";
+import type { ScheduleGapKind } from "../domain/schedule-plans.ts";
 
 const reviewTextSchema = z.object({
   text: z.string().optional(),
@@ -53,18 +54,22 @@ type SearchPlacesParams = {
   maxResultCount?: number;
 };
 
-type DestinationSearchParams = {
-  destinationTitle: string;
-  neighborhood: string;
-  travelerProfile: TravelerProfile;
-};
-
 export type DestinationSuggestion = {
   placeId: string;
   text: string;
   mainText: string;
   secondaryText: string;
   types: string[];
+};
+
+export type SlotPlaceLookupParams = {
+  slotKind: ScheduleGapKind;
+  city: string | null;
+  interests: readonly string[];
+  budgetBand: BudgetBand;
+  durationMinutes: number;
+  previousEventTitle?: string | null;
+  nextEventTitle?: string | null;
 };
 
 const TEXT_SEARCH_FIELD_MASK = [
@@ -81,6 +86,17 @@ const TEXT_SEARCH_FIELD_MASK = [
   "places.reviewSummary",
   "places.reviews",
 ].join(",");
+
+const QUICK_STOP_QUERY_MAP: Record<string, string[]> = {
+  food: ["best coffee shops in {anchor}", "best bakeries in {anchor}"],
+  nightlife: ["best cocktail bars in {anchor}", "best wine bars in {anchor}"],
+  nature: ["best parks in {anchor}", "best scenic walks in {anchor}"],
+  culture: ["best galleries in {anchor}", "best museums in {anchor}"],
+  shopping: ["best boutiques in {anchor}", "best design stores in {anchor}"],
+  wellness: ["best tea houses in {anchor}", "best quiet cafes in {anchor}"],
+  adventure: ["best viewpoints in {anchor}", "best landmark detours in {anchor}"],
+  "hidden gems": ["hidden gems in {anchor}", "best neighborhood spots in {anchor}"],
+};
 
 function getApiKey() {
   return process.env.GOOGLE_PLACES_API_KEY?.trim() || null;
@@ -162,6 +178,31 @@ function dedupePlaces(places: readonly PlaceCandidate[]) {
   }
 
   return output;
+}
+
+function priceBandScore(priceBand: string) {
+  const dollarCount = (priceBand.match(/\$/g) ?? []).length;
+  return dollarCount > 0 ? dollarCount : 2;
+}
+
+function isBudgetFit(place: PlaceCandidate, budgetBand: BudgetBand) {
+  const score = priceBandScore(place.priceBand);
+
+  if (budgetBand === "lean") return score <= 2;
+  if (budgetBand === "comfort") return score >= 2 && score <= 3;
+  return score >= 3;
+}
+
+function sortForBudget(places: readonly PlaceCandidate[], budgetBand: BudgetBand) {
+  return [...places].sort((left, right) => {
+    const fitDelta = Number(isBudgetFit(right, budgetBand)) - Number(isBudgetFit(left, budgetBand));
+
+    if (fitDelta !== 0) {
+      return fitDelta;
+    }
+
+    return right.rating - left.rating;
+  });
 }
 
 async function searchPlacesText({ textQuery, maxResultCount = 5 }: SearchPlacesParams): Promise<PlaceCandidate[]> {
@@ -263,67 +304,58 @@ export async function autocompleteDestinationSearch(input: string, sessionToken?
     .slice(0, 5);
 }
 
-function diningQueries({ destinationTitle, neighborhood }: DestinationSearchParams) {
-  const anchor = `${neighborhood}, ${destinationTitle}`;
+function slotAnchor(params: SlotPlaceLookupParams) {
+  return params.city?.trim() || "the city center";
+}
+
+function mealQueries(params: SlotPlaceLookupParams) {
+  const anchor = slotAnchor(params);
+  const context = [params.previousEventTitle, params.nextEventTitle].filter(Boolean).join(" and ");
 
   return [
     `best restaurants in ${anchor}`,
     `best cafes in ${anchor}`,
+    context ? `reliable restaurants near ${context} in ${anchor}` : `reliable lunch spots in ${anchor}`,
   ];
 }
 
-function activityQueries({ destinationTitle, neighborhood, travelerProfile }: DestinationSearchParams) {
-  const anchor = `${neighborhood}, ${destinationTitle}`;
-  const queries = [`best things to do in ${anchor}`];
+function quickStopQueries(params: SlotPlaceLookupParams) {
+  const anchor = slotAnchor(params);
+  const templates = params.interests.flatMap((interest) => QUICK_STOP_QUERY_MAP[interest] ?? []);
+  const uniqueTemplates = templates.length > 0
+    ? [...new Set(templates)]
+    : ["best cafes in {anchor}", "best neighborhood spots in {anchor}"];
 
-  if (travelerProfile.interests.includes("culture")) {
-    queries.push(`best museums and galleries in ${anchor}`);
+  const resolved = uniqueTemplates.map((template) => template.replaceAll("{anchor}", anchor));
+
+  if (params.durationMinutes >= 75) {
+    resolved.push(`best things to do in ${anchor}`);
   }
 
-  if (travelerProfile.interests.includes("nature")) {
-    queries.push(`best parks and scenic walks in ${anchor}`);
-  }
-
-  if (travelerProfile.interests.includes("nightlife")) {
-    queries.push(`best bars and nightlife in ${anchor}`);
-  }
-
-  return queries;
+  return [...new Set(resolved)].slice(0, 4);
 }
 
-function lodgingQuery({ destinationTitle, neighborhood, travelerProfile }: DestinationSearchParams) {
-  const anchor = `${neighborhood}, ${destinationTitle}`;
-  return `best ${travelerProfile.lodgingStyle} stays in ${anchor}`;
-}
-
-export async function fetchGooglePlacesCandidates(params: DestinationSearchParams) {
+export async function fetchSlotPlaceCandidates(params: SlotPlaceLookupParams) {
   if (!isGooglePlacesConfigured()) {
     return {
-      dining: [] as PlaceCandidate[],
-      activities: [] as PlaceCandidate[],
-      lodging: [] as PlaceCandidate[],
+      candidates: [] as PlaceCandidate[],
       live: false,
       reason: "GOOGLE_PLACES_API_KEY is not configured.",
     };
   }
 
   try {
-    const diningResults = await Promise.all(diningQueries(params).map((textQuery) => searchPlacesText({ textQuery, maxResultCount: 4 })));
-    const activityResults = await Promise.all(activityQueries(params).map((textQuery) => searchPlacesText({ textQuery, maxResultCount: 4 })));
-    const lodgingResults = await searchPlacesText({ textQuery: lodgingQuery(params), maxResultCount: 4 });
+    const queries = params.slotKind === "meal-window" ? mealQueries(params) : quickStopQueries(params);
+    const results = await Promise.all(queries.map((textQuery) => searchPlacesText({ textQuery, maxResultCount: 4 })));
 
     return {
-      dining: dedupePlaces(diningResults.flat()).slice(0, 6),
-      activities: dedupePlaces(activityResults.flat()).slice(0, 6),
-      lodging: lodgingResults.slice(0, 4),
+      candidates: sortForBudget(dedupePlaces(results.flat()), params.budgetBand).slice(0, 6),
       live: true,
       reason: null,
     };
   } catch (error) {
     return {
-      dining: [] as PlaceCandidate[],
-      activities: [] as PlaceCandidate[],
-      lodging: [] as PlaceCandidate[],
+      candidates: [] as PlaceCandidate[],
       live: false,
       reason: error instanceof Error ? error.message : "Google Places lookup failed.",
     };

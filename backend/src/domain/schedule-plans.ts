@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { budgetBandSchema, llmProviderSchema, paceSchema } from "./trips.ts";
+import {
+  budgetBandSchema,
+  generationMetadataSchema,
+  llmProviderSchema,
+  paceSchema,
+  placeCandidateSchema,
+} from "./planning.ts";
 import {
   DEFAULT_PLANNING_EARLIEST_TIME,
   DEFAULT_PLANNING_LATEST_TIME,
@@ -30,6 +36,8 @@ export const scheduleTransportModeSchema = z.enum([
 
 export const scheduleGapKindSchema = z.enum(["quick-stop", "meal-window"]);
 export const scheduleSuggestionStatusSchema = z.enum(["pending", "added"]);
+export const scheduleWorkflowStatusSchema = z.enum(["completed"]);
+export const scheduleWorkflowStepSchema = z.enum(["dining", "itinerary", "budget"]);
 export const scheduleTimeStringSchema = z.string().regex(TIME_STRING_PATTERN, "Expected HH:MM");
 
 export const cityInferenceSchema = z.object({
@@ -111,7 +119,9 @@ export const scheduleSuggestionSchema = z.object({
   subtitle: z.string(),
   message: z.string(),
   category: z.string(),
-  venueHint: z.string(),
+  place: placeCandidateSchema,
+  agentReason: z.string(),
+  budgetReason: z.string(),
   estimatedCost: z.string(),
   estimatedDurationMinutes: z.number().int().positive(),
   startsAt: z.string(),
@@ -119,6 +129,20 @@ export const scheduleSuggestionSchema = z.object({
   transitNote: z.string(),
   actionLabel: z.string(),
   addedEventId: z.string().nullable().default(null),
+});
+
+export const scheduleWorkflowStepResultSchema = z.object({
+  step: scheduleWorkflowStepSchema,
+  status: scheduleWorkflowStatusSchema,
+  summary: z.string(),
+  execution: generationMetadataSchema,
+});
+
+export const schedulePlanWorkflowSchema = z.object({
+  status: scheduleWorkflowStatusSchema,
+  startedAt: z.string(),
+  completedAt: z.string(),
+  steps: z.array(scheduleWorkflowStepResultSchema),
 });
 
 export const schedulePlanRequestSchema = z.object({
@@ -133,6 +157,8 @@ export const schedulePlanSchema = z.object({
   createdAt: z.string(),
   request: schedulePlanRequestSchema,
   tripContext: scheduleTripContextSchema,
+  generation: generationMetadataSchema,
+  workflow: schedulePlanWorkflowSchema,
   slots: z.array(scheduleSlotSchema),
   suggestions: z.array(scheduleSuggestionSchema),
   timeline: z.array(normalizedCalendarEventSchema),
@@ -143,6 +169,8 @@ export type NormalizedCalendarEventType = z.infer<typeof normalizedCalendarEvent
 export type ScheduleTransportMode = z.infer<typeof scheduleTransportModeSchema>;
 export type ScheduleGapKind = z.infer<typeof scheduleGapKindSchema>;
 export type ScheduleSuggestionStatus = z.infer<typeof scheduleSuggestionStatusSchema>;
+export type ScheduleWorkflowStatus = z.infer<typeof scheduleWorkflowStatusSchema>;
+export type ScheduleWorkflowStep = z.infer<typeof scheduleWorkflowStepSchema>;
 export type CityInference = z.infer<typeof cityInferenceSchema>;
 export type NormalizedCalendarEvent = z.infer<typeof normalizedCalendarEventSchema>;
 export type ImportedCalendar = z.infer<typeof importedCalendarSchema>;
@@ -150,5 +178,7 @@ export type SchedulePlanPreferences = z.infer<typeof schedulePlanPreferencesSche
 export type ScheduleTripContext = z.infer<typeof scheduleTripContextSchema>;
 export type ScheduleSlot = z.infer<typeof scheduleSlotSchema>;
 export type ScheduleSuggestion = z.infer<typeof scheduleSuggestionSchema>;
+export type ScheduleWorkflowStepResult = z.infer<typeof scheduleWorkflowStepResultSchema>;
+export type SchedulePlanWorkflow = z.infer<typeof schedulePlanWorkflowSchema>;
 export type SchedulePlanRequest = z.infer<typeof schedulePlanRequestSchema>;
 export type SchedulePlan = z.infer<typeof schedulePlanSchema>;

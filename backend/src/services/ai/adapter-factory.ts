@@ -1,4 +1,4 @@
-import type { LLMProvider } from "../../domain/trips.ts";
+import type { LLMProvider } from "../../domain/planning.ts";
 import type { ProviderAdapter } from "./provider-adapter.ts";
 import { AnthropicProviderAdapter } from "./anthropic-adapter.ts";
 import { OpenAIProviderAdapter } from "./openai-adapter.ts";
