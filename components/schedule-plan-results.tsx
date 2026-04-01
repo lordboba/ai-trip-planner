@@ -6,10 +6,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { NormalizedCalendarEvent, SchedulePlan, ScheduleSuggestion } from "@/lib/types";
 import {
   formatScheduleDateRange,
-  formatScheduleDayLabel,
+  formatScheduleDayKeyLabel,
   formatScheduleTimeRange,
   titleCaseEventType,
 } from "@/lib/schedule-format";
+import { getTimeZoneDayKey, resolveTimeZone } from "@/lib/timezone";
 
 type Props = {
   initialPlan: SchedulePlan;
@@ -19,7 +20,7 @@ type TimelineItem =
   | { kind: "event"; key: string; startsAt: string; event: NormalizedCalendarEvent }
   | { kind: "suggestion"; key: string; startsAt: string; suggestion: ScheduleSuggestion };
 
-function groupTimeline(plan: SchedulePlan) {
+function groupTimeline(plan: SchedulePlan, timeZone: string) {
   const items: TimelineItem[] = [
     ...plan.timeline.map((event) => ({
       kind: "event" as const,
@@ -40,7 +41,7 @@ function groupTimeline(plan: SchedulePlan) {
   const groups = new Map<string, TimelineItem[]>();
 
   for (const item of items) {
-    const dayKey = item.startsAt.slice(0, 10);
+    const dayKey = getTimeZoneDayKey(item.startsAt, timeZone);
     const existing = groups.get(dayKey) ?? [];
     existing.push(item);
     groups.set(dayKey, existing);
@@ -54,9 +55,10 @@ export function SchedulePlanResults({ initialPlan }: Props) {
   const [pendingSuggestionId, setPendingSuggestionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const scheduleTimeZone = resolveTimeZone(plan.tripContext.timezone ?? plan.request.importedSchedule.timezone);
 
-  const groupedTimeline = useMemo(() => groupTimeline(plan), [plan]);
-  const dateRange = formatScheduleDateRange(plan.tripContext.tripStart, plan.tripContext.tripEnd);
+  const groupedTimeline = useMemo(() => groupTimeline(plan, scheduleTimeZone), [plan, scheduleTimeZone]);
+  const dateRange = formatScheduleDateRange(plan.tripContext.tripStart, plan.tripContext.tripEnd, scheduleTimeZone);
   const city = plan.tripContext.cityInference.city ?? "Imported trip";
   const pendingSuggestions = plan.suggestions.filter((suggestion) => suggestion.status === "pending");
   const addedSuggestions = plan.suggestions.filter((suggestion) => suggestion.status === "added");
@@ -124,6 +126,9 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                 <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/82">
                   {pendingSuggestions.length} pending suggestions
                 </span>
+                <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/82">
+                  {plan.request.preferences.earliestTime} to {plan.request.preferences.latestTime}
+                </span>
               </div>
             </div>
 
@@ -168,7 +173,7 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-coral">Day</p>
                   <h2 className="mt-1 text-xl font-extrabold text-warm-900">
-                    {formatScheduleDayLabel(`${dayKey}T00:00:00.000Z`)}
+                    {formatScheduleDayKeyLabel(dayKey)}
                   </h2>
                 </div>
                 <span className="rounded-full border border-warm-100 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-400">
@@ -199,7 +204,12 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                         </div>
                         <div className="text-left md:text-right">
                           <p className="text-sm font-semibold text-warm-900">
-                            {formatScheduleTimeRange(item.event.startsAt, item.event.endsAt, item.event.isAllDay)}
+                            {formatScheduleTimeRange(
+                              item.event.startsAt,
+                              item.event.endsAt,
+                              item.event.isAllDay,
+                              item.event.timezone ?? scheduleTimeZone,
+                            )}
                           </p>
                           <p className="mt-1 text-xs text-warm-400">{titleCaseEventType(item.event.type)}</p>
                         </div>
@@ -230,7 +240,12 @@ export function SchedulePlanResults({ initialPlan }: Props) {
                         </div>
                         <div className="w-full md:w-auto md:text-right">
                           <p className="text-sm font-semibold text-warm-900">
-                            {formatScheduleTimeRange(item.suggestion.startsAt, item.suggestion.endsAt)}
+                            {formatScheduleTimeRange(
+                              item.suggestion.startsAt,
+                              item.suggestion.endsAt,
+                              false,
+                              scheduleTimeZone,
+                            )}
                           </p>
                           <p className="mt-2 text-xs leading-5 text-warm-400">{item.suggestion.transitNote}</p>
                           <button

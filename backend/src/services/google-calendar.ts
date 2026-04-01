@@ -6,6 +6,7 @@ import {
   type NormalizedCalendarEvent,
 } from "../domain/schedule-plans.ts";
 import { filterEventsByDateRange, inferCalendarCity } from "./calendar-import-service.ts";
+import { addDaysToDayKey } from "../../../lib/timezone.ts";
 
 const googleCalendarDateSchema = z.object({
   date: z.string().optional(),
@@ -154,8 +155,8 @@ export async function importCalendarFromGoogleEvents(input: {
   const startDate = input.startDate ?? null;
   const endDate = input.endDate ?? null;
 
-  const timeMin = startDate ? `${startDate}T00:00:00.000Z` : undefined;
-  const timeMax = endDate ? `${endDate}T23:59:59.999Z` : undefined;
+  const timeMin = startDate ? `${addDaysToDayKey(startDate, -1)}T00:00:00.000Z` : undefined;
+  const timeMax = endDate ? `${addDaysToDayKey(endDate, 1)}T23:59:59.999Z` : undefined;
 
   const params = new URLSearchParams({
     maxResults: "2500",
@@ -179,7 +180,7 @@ export async function importCalendarFromGoogleEvents(input: {
 
   const payload = googleCalendarListEventsSchema.parse(await response.json());
   const normalizedEvents = normalizeGoogleEvents(payload.items);
-  const filteredEvents = filterEventsByDateRange(normalizedEvents, startDate, endDate);
+  const filteredEvents = filterEventsByDateRange(normalizedEvents, startDate, endDate, payload.timeZone ?? null);
   const cityInference = inferCalendarCity(filteredEvents);
 
   return importedCalendarSchema.parse({

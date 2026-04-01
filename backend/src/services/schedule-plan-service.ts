@@ -12,9 +12,18 @@ import {
   type ScheduleTripContext,
 } from "../domain/schedule-plans.ts";
 import { getStoredSchedulePlan, saveSchedulePlan } from "../store/schedule-plan-store.ts";
+import {
+  getTimeZoneDayKey,
+  getTimeZoneMinutes,
+  resolveTimeZone,
+  zonedDateTimeToUtcIso,
+} from "../../../lib/timezone.ts";
 
-const DAY_START_HOUR = 8;
-const DAY_END_HOUR = 21;
+const MEAL_WINDOWS = [
+  { label: "Breakfast window", startsAtMinutes: 7 * 60, endsAtMinutes: 10 * 60 + 30 },
+  { label: "Lunch window", startsAtMinutes: 11 * 60 + 30, endsAtMinutes: 14 * 60 + 30 },
+  { label: "Dinner window", startsAtMinutes: 17 * 60, endsAtMinutes: 20 * 60 + 30 },
+] as const;
 
 const INTEREST_PROFILES = {
   food: { category: "meal", venueHint: "A reliable local table with fast service.", quickStopTitle: "Coffee or snack reset" },
@@ -34,24 +43,8 @@ function sortEvents(events: readonly NormalizedCalendarEvent[]) {
   ));
 }
 
-function isoDayKey(iso: string) {
-  return iso.slice(0, 10);
-}
-
-function parseIso(iso: string) {
-  return new Date(iso);
-}
-
 function minutesBetween(startIso: string, endIso: string) {
   return Math.round((Date.parse(endIso) - Date.parse(startIso)) / 60000);
-}
-
-function sameDay(startIso: string, endIso: string) {
-  return isoDayKey(startIso) === isoDayKey(endIso);
-}
-
-function setDayTime(dayKey: string, hour: number, minute = 0) {
-  return new Date(`${dayKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`).toISOString();
 }
 
 function unique<T>(items: readonly T[]) {
@@ -62,17 +55,18 @@ function deriveTripContext(importedSchedule: ImportedCalendar): ScheduleTripCont
   const timeline = sortEvents(importedSchedule.events);
   const tripStart = timeline[0]?.startsAt ?? null;
   const tripEnd = timeline.at(-1)?.endsAt ?? null;
+  const timezone = importedSchedule.timezone ?? timeline.find((event) => event.timezone)?.timezone ?? null;
   const travelDayCount = unique(
     timeline.flatMap((event) => {
-      const startDay = isoDayKey(event.startsAt);
-      const endDay = isoDayKey(event.endsAt);
+      const startDay = getTimeZoneDayKey(event.startsAt, timezone);
+      const endDay = getTimeZoneDayKey(event.endsAt, timezone);
       return startDay === endDay ? [startDay] : [startDay, endDay];
     }),
   ).length;
 
   return {
     cityInference: importedSchedule.cityInference,
-    timezone: importedSchedule.timezone,
+    timezone,
     tripStart,
     tripEnd,
     totalEvents: timeline.length,
@@ -80,20 +74,62 @@ function deriveTripContext(importedSchedule: ImportedCalendar): ScheduleTripCont
   };
 }
 
-function overlapsMealWindow(startIso: string, endIso: string) {
-  const start = parseIso(startIso);
-  const end = parseIso(endIso);
-  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
-  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
-  const lunch = startMinutes < 14 * 60 + 30 && endMinutes > 11 * 60 + 30;
-  const dinner = startMinutes < 20 * 60 + 30 && endMinutes > 17 * 60 + 30;
-  return lunch || dinner;
+function planningTimeZone(importedSchedule: ImportedCalendar) {
+  return resolveTimeZone(importedSchedule.timezone ?? importedSchedule.events.find((event) => event.timezone)?.timezone);
+}
+
+function overlapsRange(startMinutes: number, endMinutes: number, rangeStartMinutes: number, rangeEndMinutes: number) {
+  return startMinutes < rangeEndMinutes && endMinutes > rangeStartMinutes;
+}
+
+function overlapsMealWindow(startIso: string, endIso: string, timeZone: string) {
+  const startMinutes = getTimeZoneMinutes(startIso, timeZone);
+  const endMinutes = getTimeZoneMinutes(endIso, timeZone);
+  return MEAL_WINDOWS.some((window) => (
+    overlapsRange(startMinutes, endMinutes, window.startsAtMinutes, window.endsAtMinutes)
+  ));
+}
+
+function mealLabelForSlot(slot: ScheduleSlot, timeZone: string) {
+  const startMinutes = getTimeZoneMinutes(slot.startsAt, timeZone);
+  const endMinutes = getTimeZoneMinutes(slot.endsAt, timeZone);
+  const midpointMinutes = startMinutes + Math.max(0, Math.floor((endMinutes - startMinutes) / 2));
+  const containingWindow = MEAL_WINDOWS.find((window) => (
+    midpointMinutes >= window.startsAtMinutes && midpointMinutes < window.endsAtMinutes
+  ));
+
+  if (containingWindow) {
+    return containingWindow.label;
+  }
+
+  const overlappingWindow = MEAL_WINDOWS.find((window) => (
+    overlapsRange(startMinutes, endMinutes, window.startsAtMinutes, window.endsAtMinutes)
+  ));
+
+  return overlappingWindow?.label ?? "Meal window";
+}
+
+function clampSlotToPlanningWindow(
+  startsAt: string,
+  endsAt: string,
+  dayKey: string,
+  earliestTime: string,
+  latestTime: string,
+  timeZone: string,
+) {
+  const windowStart = zonedDateTimeToUtcIso(dayKey, `${earliestTime}:00`, timeZone);
+  const windowEnd = zonedDateTimeToUtcIso(dayKey, `${latestTime}:00`, timeZone);
+  return {
+    startsAt: Date.parse(startsAt) > Date.parse(windowStart) ? startsAt : windowStart,
+    endsAt: Date.parse(endsAt) < Date.parse(windowEnd) ? endsAt : windowEnd,
+  };
 }
 
 function buildSlot(params: {
   startsAt: string;
   endsAt: string;
   city: string | null;
+  timeZone: string;
   previousEventId?: string | null;
   nextEventId?: string | null;
 }): ScheduleSlot | null {
@@ -103,7 +139,7 @@ function buildSlot(params: {
     return null;
   }
 
-  const kind: ScheduleGapKind = durationMinutes >= 45 && overlapsMealWindow(params.startsAt, params.endsAt)
+  const kind: ScheduleGapKind = durationMinutes >= 45 && overlapsMealWindow(params.startsAt, params.endsAt, params.timeZone)
     ? "meal-window"
     : "quick-stop";
 
@@ -120,15 +156,16 @@ function buildSlot(params: {
   };
 }
 
-function detectScheduleSlots(importedSchedule: ImportedCalendar) {
+function detectScheduleSlots(importedSchedule: ImportedCalendar, preferences: SchedulePlanPreferences) {
   const blockingEvents = sortEvents(
     importedSchedule.events.filter((event) => !event.isAllDay && event.type !== "hotel"),
   );
   const slots: ScheduleSlot[] = [];
   const eventsByDay = new Map<string, NormalizedCalendarEvent[]>();
+  const timeZone = planningTimeZone(importedSchedule);
 
   for (const event of blockingEvents) {
-    const dayKey = isoDayKey(event.startsAt);
+    const dayKey = getTimeZoneDayKey(event.startsAt, timeZone);
     const dayEvents = eventsByDay.get(dayKey) ?? [];
     dayEvents.push(event);
     eventsByDay.set(dayKey, dayEvents);
@@ -140,10 +177,19 @@ function detectScheduleSlots(importedSchedule: ImportedCalendar) {
     const lastEvent = sortedDayEvents.at(-1);
 
     if (firstEvent) {
+      const morningBounds = clampSlotToPlanningWindow(
+        zonedDateTimeToUtcIso(dayKey, `${preferences.earliestTime}:00`, timeZone),
+        firstEvent.startsAt,
+        dayKey,
+        preferences.earliestTime,
+        preferences.latestTime,
+        timeZone,
+      );
       const morningSlot = buildSlot({
-        startsAt: setDayTime(dayKey, DAY_START_HOUR),
-        endsAt: firstEvent.startsAt,
+        startsAt: morningBounds.startsAt,
+        endsAt: morningBounds.endsAt,
         city: firstEvent.inferredCity ?? importedSchedule.cityInference.city,
+        timeZone,
         previousEventId: null,
         nextEventId: firstEvent.id,
       });
@@ -157,14 +203,23 @@ function detectScheduleSlots(importedSchedule: ImportedCalendar) {
       const current = sortedDayEvents[index];
       const next = sortedDayEvents[index + 1];
 
-      if (!sameDay(current.endsAt, next.startsAt)) {
+      if (getTimeZoneDayKey(current.endsAt, timeZone) !== getTimeZoneDayKey(next.startsAt, timeZone)) {
         continue;
       }
 
+      const clampedGap = clampSlotToPlanningWindow(
+        current.endsAt,
+        next.startsAt,
+        dayKey,
+        preferences.earliestTime,
+        preferences.latestTime,
+        timeZone,
+      );
       const slot = buildSlot({
-        startsAt: current.endsAt,
-        endsAt: next.startsAt,
+        startsAt: clampedGap.startsAt,
+        endsAt: clampedGap.endsAt,
         city: current.inferredCity ?? next.inferredCity ?? importedSchedule.cityInference.city,
+        timeZone,
         previousEventId: current.id,
         nextEventId: next.id,
       });
@@ -175,10 +230,19 @@ function detectScheduleSlots(importedSchedule: ImportedCalendar) {
     }
 
     if (lastEvent) {
+      const eveningBounds = clampSlotToPlanningWindow(
+        lastEvent.endsAt,
+        zonedDateTimeToUtcIso(dayKey, `${preferences.latestTime}:00`, timeZone),
+        dayKey,
+        preferences.earliestTime,
+        preferences.latestTime,
+        timeZone,
+      );
       const eveningSlot = buildSlot({
-        startsAt: lastEvent.endsAt,
-        endsAt: setDayTime(dayKey, DAY_END_HOUR),
+        startsAt: eveningBounds.startsAt,
+        endsAt: eveningBounds.endsAt,
         city: lastEvent.inferredCity ?? importedSchedule.cityInference.city,
+        timeZone,
         previousEventId: lastEvent.id,
         nextEventId: null,
       });
@@ -250,19 +314,12 @@ function suggestionWindow(slot: ScheduleSlot, preferredMinutes: number) {
   return { startsAt: start, endsAt: end, durationMinutes: minutesBetween(start, end) };
 }
 
-function labelForGap(slot: ScheduleSlot) {
-  const start = parseIso(slot.startsAt);
-  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
-
+function labelForGap(slot: ScheduleSlot, timeZone: string) {
   if (slot.kind !== "meal-window") {
     return "Quick stop";
   }
 
-  if (startMinutes < 15 * 60) {
-    return "Lunch window";
-  }
-
-  return "Dinner window";
+  return mealLabelForSlot(slot, timeZone);
 }
 
 function generateSuggestions(
@@ -274,12 +331,13 @@ function generateSuggestions(
   const profile = INTEREST_PROFILES[interest];
   const timeline = sortEvents(importedSchedule.events);
   const timelineById = new Map(timeline.map((event) => [event.id, event]));
+  const timeZone = planningTimeZone(importedSchedule);
 
   return slots.map((slot) => {
     const previousEvent = slot.previousEventId ? timelineById.get(slot.previousEventId) ?? null : null;
     const nextEvent = slot.nextEventId ? timelineById.get(slot.nextEventId) ?? null : null;
     const areaLabel = slot.city ?? importedSchedule.cityInference.city ?? "your route";
-    const gapLabel = labelForGap(slot);
+    const gapLabel = labelForGap(slot, timeZone);
     const window = suggestionWindow(slot, slot.kind === "meal-window" ? 60 : 35);
     const title = slot.kind === "meal-window"
       ? `${gapLabel} near ${areaLabel}`
@@ -322,7 +380,7 @@ function generateSuggestions(
 
 function buildSchedulePlan(request: SchedulePlanRequest): SchedulePlan {
   const tripContext = deriveTripContext(request.importedSchedule);
-  const slots = detectScheduleSlots(request.importedSchedule);
+  const slots = detectScheduleSlots(request.importedSchedule, request.preferences);
   const suggestions = generateSuggestions(request.importedSchedule, request.preferences, slots);
 
   return schedulePlanSchema.parse({

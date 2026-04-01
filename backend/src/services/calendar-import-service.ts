@@ -6,6 +6,7 @@ import {
   type NormalizedCalendarEvent,
   type NormalizedCalendarEventType,
 } from "../domain/schedule-plans.ts";
+import { resolveTimeZone, zonedDateTimeToUtcIso } from "../../../lib/timezone.ts";
 
 type ParsedProperty = {
   value: string;
@@ -94,10 +95,10 @@ function parsePropertyLine(line: string) {
   return { name, value, params };
 }
 
-function parseIcsDate(value: string, params: Record<string, string>) {
+function parseIcsDate(value: string, params: Record<string, string>, defaultTimezone: string | null) {
   const trimmed = value.trim();
   const isAllDay = params.VALUE === "DATE" || /^\d{8}$/.test(trimmed);
-  const timezone = params.TZID?.trim() || null;
+  const timezone = params.TZID?.trim() || defaultTimezone || null;
 
   if (isAllDay) {
     const year = Number(trimmed.slice(0, 4));
@@ -118,14 +119,11 @@ function parseIcsDate(value: string, params: Record<string, string>) {
   const [, year, month, day, hour, minute, second = "00", zulu] = match;
   const iso = zulu
     ? new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`).toISOString()
-    : new Date(Date.UTC(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      Number(second),
-    )).toISOString();
+    : zonedDateTimeToUtcIso(
+      `${year}-${month}-${day}`,
+      `${hour}:${minute}:${second}`,
+      timezone,
+    );
 
   return { iso, isAllDay: false, timezone };
 }
@@ -312,9 +310,9 @@ function normalizeRawEvent(rawEvent: RawCalendarEvent, defaultTimezone: string |
     throw new Error("Calendar event missing DTSTART");
   }
 
-  const start = parseIcsDate(rawEvent.dtstart.value, rawEvent.dtstart.params);
+  const start = parseIcsDate(rawEvent.dtstart.value, rawEvent.dtstart.params, defaultTimezone);
   const end = rawEvent.dtend
-    ? parseIcsDate(rawEvent.dtend.value, rawEvent.dtend.params)
+    ? parseIcsDate(rawEvent.dtend.value, rawEvent.dtend.params, defaultTimezone)
     : {
       iso: new Date(
         Date.parse(start.iso) + (start.isAllDay || rawEvent.allDay ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000),
@@ -355,10 +353,12 @@ export function filterEventsByDateRange(
   events: readonly NormalizedCalendarEvent[],
   startDate: string | null,
   endDate: string | null,
+  timeZone?: string | null,
 ): NormalizedCalendarEvent[] {
   if (!startDate || !endDate) return [...events];
-  const rangeStart = `${startDate}T00:00:00.000Z`;
-  const rangeEnd = `${endDate}T23:59:59.999Z`;
+  const resolvedTimeZone = resolveTimeZone(timeZone);
+  const rangeStart = zonedDateTimeToUtcIso(startDate, "00:00:00", resolvedTimeZone);
+  const rangeEnd = zonedDateTimeToUtcIso(endDate, "23:59:59", resolvedTimeZone);
   return events.filter(
     (event) => event.endsAt > rangeStart && event.startsAt <= rangeEnd,
   );
@@ -378,6 +378,7 @@ export function importCalendarFromIcsText(input: {
     normalizedEvents,
     input.startDate ?? null,
     input.endDate ?? null,
+    calendarTimezone,
   );
   const cityInference = inferCalendarCity(filteredEvents);
 

@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { budgetBandSchema, llmProviderSchema, paceSchema } from "./trips.ts";
+import {
+  DEFAULT_PLANNING_EARLIEST_TIME,
+  DEFAULT_PLANNING_LATEST_TIME,
+  isPlanningWindowValid,
+  TIME_STRING_PATTERN,
+} from "../../../lib/timezone.ts";
 
 export const calendarImportSourceSchema = z.enum(["ics", "google"]);
 
@@ -24,6 +30,7 @@ export const scheduleTransportModeSchema = z.enum([
 
 export const scheduleGapKindSchema = z.enum(["quick-stop", "meal-window"]);
 export const scheduleSuggestionStatusSchema = z.enum(["pending", "added"]);
+export const scheduleTimeStringSchema = z.string().regex(TIME_STRING_PATTERN, "Expected HH:MM");
 
 export const cityInferenceSchema = z.object({
   city: z.string().nullable(),
@@ -64,8 +71,16 @@ export const schedulePlanPreferencesSchema = z.object({
   interests: z.array(z.string()).default([]),
   pace: paceSchema,
   transport: scheduleTransportModeSchema,
+  earliestTime: scheduleTimeStringSchema.default(DEFAULT_PLANNING_EARLIEST_TIME),
+  latestTime: scheduleTimeStringSchema.default(DEFAULT_PLANNING_LATEST_TIME),
   comments: z.string().default(""),
-});
+}).refine(
+  (value) => isPlanningWindowValid(value.earliestTime, value.latestTime),
+  {
+    message: "Latest planning time must be after earliest planning time.",
+    path: ["latestTime"],
+  },
+);
 
 export const scheduleTripContextSchema = z.object({
   cityInference: cityInferenceSchema,

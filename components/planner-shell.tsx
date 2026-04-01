@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getSavedTrips, type SavedTripSnapshot } from "@/lib/browser-saved-trips";
+import {
+  DEFAULT_PLANNING_EARLIEST_TIME,
+  DEFAULT_PLANNING_LATEST_TIME,
+  isPlanningWindowValid,
+} from "@/lib/timezone";
 import type {
   BudgetBand,
   ImportedCalendar,
@@ -46,6 +51,19 @@ const transportOptions = [
   { label: "Mixed", value: "mixed" },
 ] as const;
 
+const planningTimeOptions = Array.from({ length: 38 }, (_, index) => {
+  const totalMinutes = 5 * 60 + index * 30;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const value = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  const label = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(`2000-01-01T${value}:00`));
+
+  return { value, label };
+});
+
 /* ------------------------------------------------------------------ */
 /*  Style helpers                                                      */
 /* ------------------------------------------------------------------ */
@@ -81,13 +99,19 @@ function toggleValue(arr: string[], v: string) {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function PlannerShell() {
+type PlannerShellProps = {
+  googleCalendarState: string | null;
+  googleCalendarStartDate: string | null;
+  googleCalendarEndDate: string | null;
+};
+
+export function PlannerShell({
+  googleCalendarState,
+  googleCalendarStartDate,
+  googleCalendarEndDate,
+}: PlannerShellProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const googleCalendarState = searchParams.get("googleCalendar");
-  const googleCalendarStartDate = searchParams.get("startDate");
-  const googleCalendarEndDate = searchParams.get("endDate");
 
   /* ---- Calendar state ---- */
   const [calendarFile, setCalendarFile] = useState<File | null>(null);
@@ -100,6 +124,8 @@ export function PlannerShell() {
   /* ---- Core fields ---- */
   const [startDate, setStartDate] = useState(todayString());
   const [endDate, setEndDate] = useState(todayString());
+  const [earliestTime, setEarliestTime] = useState(DEFAULT_PLANNING_EARLIEST_TIME);
+  const [latestTime, setLatestTime] = useState(DEFAULT_PLANNING_LATEST_TIME);
 
   /* ---- Advanced preferences ---- */
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -122,11 +148,12 @@ export function PlannerShell() {
 
   /* ---- Derived city label ---- */
   const inferredCity = importedCalendar?.cityInference?.city ?? null;
+  const planningWindowIsValid = isPlanningWindowValid(earliestTime, latestTime);
 
   /* ---- Can generate? ---- */
   const canGenerate = useMemo(
-    () => importedCalendar !== null && datesValid(startDate, endDate),
-    [importedCalendar, startDate, endDate],
+    () => importedCalendar !== null && datesValid(startDate, endDate) && planningWindowIsValid,
+    [importedCalendar, startDate, endDate, planningWindowIsValid],
   );
 
   const resetImportedCalendar = useCallback(() => {
@@ -281,6 +308,8 @@ export function PlannerShell() {
       interests,
       pace,
       transport,
+      earliestTime,
+      latestTime,
       comments,
     };
 
@@ -474,6 +503,47 @@ export function PlannerShell() {
           </div>
           {startDate && endDate && endDate < startDate && (
             <p className="mt-1.5 text-xs text-red-500">End date must be on or after start date.</p>
+          )}
+        </div>
+
+        {/* ── Section 3: Planning hours ── */}
+        <div className="mb-6">
+          <label className={labelClasses}>Planning hours</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <select
+                value={earliestTime}
+                onChange={(e) => setEarliestTime(e.target.value)}
+                className={inputClasses}
+                aria-label="Earliest planning time"
+              >
+                {planningTimeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <select
+                value={latestTime}
+                onChange={(e) => setLatestTime(e.target.value)}
+                className={inputClasses}
+                aria-label="Latest planning time"
+              >
+                {planningTimeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-warm-400">
+            Suggestions will only be placed inside this daily time window.
+          </p>
+          {!planningWindowIsValid && (
+            <p className="mt-1.5 text-xs text-red-500">Latest time must be after earliest time.</p>
           )}
         </div>
 
