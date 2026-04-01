@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { onboardingSteps } from "@/lib/onboarding";
 import { GoogleMapFrame } from "@/components/google-map-frame";
+import { getSavedTrips, type SavedTripSnapshot } from "@/lib/browser-saved-trips";
 import type {
   BudgetBand,
   DestinationIntent,
@@ -135,8 +136,15 @@ export function PlannerShell() {
     return `session-${Math.random().toString(36).slice(2)}`;
   });
   const [error, setError] = useState<string | null>(null);
+  const [savedTrips, setSavedTrips] = useState<SavedTripSnapshot[]>([]);
   const [isPending, startTransition] = useTransition();
   const deferredDestinationQuery = useDeferredValue(form.destinationQuery);
+  const shortlistEntries = useMemo(
+    () => form.destinationIntent === "shortlist"
+      ? form.destinationQuery.split(",").map((item) => item.trim()).filter(Boolean)
+      : [],
+    [form.destinationIntent, form.destinationQuery],
+  );
 
   const destinationHint = useMemo(() => {
     if (form.destinationIntent === "fixed") return "Enter a city or region you already want.";
@@ -183,6 +191,10 @@ export function PlannerShell() {
       createdAt: new Date().toISOString(),
     };
   }
+
+  useEffect(() => {
+    setSavedTrips(getSavedTrips());
+  }, []);
 
   useEffect(() => {
     if (!autocompleteEnabled) {
@@ -279,6 +291,36 @@ export function PlannerShell() {
 
   return (
     <div className="w-full max-w-lg">
+      {savedTrips.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-warm-600 bg-warm-800/70 p-4 text-white shadow-[0_18px_50px_rgba(26,22,20,0.18)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-coral-light">Saved in this browser</p>
+              <h2 className="mt-1 text-sm font-bold">Recent trip outputs</h2>
+            </div>
+            <p className="text-[11px] text-white/55">{savedTrips.length} stored locally</p>
+          </div>
+          <div className="space-y-2">
+            {savedTrips.slice(0, 3).map((trip) => (
+              <button
+                key={trip.id}
+                type="button"
+                onClick={() => router.push(`/trip/local/${trip.id}`)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{trip.plan.destinationSummary.title}</p>
+                  <p className="mt-1 truncate text-xs text-white/60">
+                    {trip.request.travelerProfile.startDate} to {trip.request.travelerProfile.endDate} · {trip.request.travelerProfile.budgetBand}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs font-semibold text-coral-light">Open</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Progress */}
       <div className="flex items-center gap-3 mb-6">
         <span className="text-xs font-semibold text-coral-light">Step {stepIndex + 1} of {totalSteps}</span>
@@ -362,30 +404,47 @@ export function PlannerShell() {
                     <div className="relative">
                       <label htmlFor="destinationQuery" className={labelClasses}>Destination notes</label>
                       <div className="rounded-[1.4rem] border border-warm-100 bg-white/90 p-2 shadow-[0_24px_60px_rgba(61,54,50,0.08)]">
-                        <div className="flex items-center gap-3 rounded-[1.1rem] bg-gradient-to-r from-coral-wash via-white to-warm-50 px-3 py-2">
-                          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-warm-900 text-sm text-white shadow-[0_10px_25px_rgba(26,22,20,0.22)]">
-                            ⌘
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <input
-                              id="destinationQuery"
-                              placeholder={form.destinationIntent === "shortlist" ? "Lisbon, Mexico City, Kyoto" : "Lisbon"}
-                              value={form.destinationQuery}
-                              onChange={(e) => setForm((current) => ({ ...current, destinationQuery: e.target.value, destinationPlaceId: undefined }))}
-                              onFocus={() => setSuggestionsOpen(destinationSuggestions.length > 0)}
-                              autoComplete="off"
-                              className="w-full bg-transparent text-sm font-semibold text-warm-900 placeholder:text-warm-400 focus:outline-none"
-                            />
-                            <p className="mt-0.5 text-[11px] text-warm-400">{destinationHint}</p>
-                          </div>
-                          <div className="text-right">
-                            <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${autocompleteLive ? "text-coral" : "text-warm-400"}`}>
-                              {autocompleteLive ? "Live search" : "Planner input"}
+                        <div className="rounded-[1.1rem] bg-gradient-to-r from-coral-wash via-white to-warm-50 px-3 py-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-warm-900 text-sm text-white shadow-[0_10px_25px_rgba(26,22,20,0.22)]">
+                                ⌘
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <input
+                                  id="destinationQuery"
+                                  placeholder={form.destinationIntent === "shortlist" ? "Lisbon, Mexico City, Kyoto" : "Lisbon"}
+                                  value={form.destinationQuery}
+                                  onChange={(e) => setForm((current) => ({ ...current, destinationQuery: e.target.value, destinationPlaceId: undefined }))}
+                                  onFocus={() => setSuggestionsOpen(destinationSuggestions.length > 0)}
+                                  autoComplete="off"
+                                  className="w-full bg-transparent text-sm font-semibold text-warm-900 placeholder:text-warm-400 focus:outline-none"
+                                />
+                                <p className="mt-1 text-[11px] text-warm-400">{destinationHint}</p>
+                              </div>
                             </div>
-                            <div className="text-[10px] text-warm-400">
-                              {isAutocompletePending ? "Searching..." : form.destinationIntent === "help-me-choose" ? "Optional" : "Google Places"}
+                            <div className="flex items-center justify-between gap-3 border-t border-warm-100/80 pt-2 sm:block sm:border-t-0 sm:pt-0 sm:text-right">
+                              <div className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${autocompleteLive ? "text-coral" : "text-warm-400"}`}>
+                                {autocompleteLive ? "Live search" : "Planner input"}
+                              </div>
+                              <div className="text-[10px] text-warm-400">
+                                {isAutocompletePending ? "Searching..." : form.destinationIntent === "help-me-choose" ? "Optional" : "Google Places"}
+                              </div>
                             </div>
                           </div>
+
+                          {shortlistEntries.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-warm-100/80 pt-3">
+                              {shortlistEntries.map((entry) => (
+                                <span
+                                  key={entry}
+                                  className="rounded-full border border-coral/20 bg-white px-3 py-1 text-xs font-medium text-warm-600"
+                                >
+                                  {entry}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -558,13 +617,25 @@ export function PlannerShell() {
                   </div>
                   <div className="bg-warm-50 rounded-xl p-4">
                     <p className="text-xs font-semibold uppercase tracking-widest text-warm-400 mb-2">Taste profile</p>
-                    <p className="text-sm text-warm-600">{form.interests.join(", ")}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {form.interests.map((interest) => (
+                        <span key={interest} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-warm-600">
+                          {interest}
+                        </span>
+                      ))}
+                    </div>
                     <p className="text-sm text-warm-400 mt-1">{form.neighborhoodVibe}</p>
                     <p className="text-sm text-warm-400 mt-1">{form.lodgingStyle}</p>
                   </div>
                   <div className="bg-warm-50 rounded-xl p-4 md:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-widest text-warm-400 mb-2">Constraints</p>
-                    <p className="text-sm text-warm-600">{form.constraintsNotes}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {form.constraintsNotes.split(",").map((item) => item.trim()).filter(Boolean).map((item) => (
+                        <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-warm-600">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                     <p className="text-sm text-warm-400 mt-2"><strong className="text-warm-600">Must-haves:</strong> {form.mustHaves}</p>
                     <p className="text-sm text-warm-400 mt-1"><strong className="text-warm-600">Hard no:</strong> {form.hardNos}</p>
                   </div>

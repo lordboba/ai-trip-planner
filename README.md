@@ -42,6 +42,14 @@ BACKEND_URL=http://127.0.0.1:8787
 
 Leave `BACKEND_URL` unset for the same-project Vercel shape, where the Next app uses the backend service layer in-process. Set it only when the web app should call a separately deployed backend.
 
+Optional access gate:
+
+```bash
+TRIPWISE_ACCESS_CODE=your-shared-code
+```
+
+If `TRIPWISE_ACCESS_CODE` is set, the landing page shows a first-screen access gate and the planner routes stay locked behind an httpOnly cookie until the correct code is entered. Leave it unset to disable the gate entirely.
+
 ## Backend
 
 Run the standalone backend service:
@@ -74,6 +82,7 @@ The Next.js API routes and trip pages now go through a backend adapter. With no 
 - Google Places-powered destination autocomplete in onboarding
 - Internal map embed route for destination and trip map previews
 - Results page backed by typed trip contracts and an in-memory store
+- Browser-local saved trip snapshots, available from the planner even after refresh
 - Standalone backend server with the same trip creation and fetch endpoints
 - Structured workflow orchestration with validated step outputs, direct OpenAI/Claude backend calls, and a stored workflow trace
 

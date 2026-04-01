@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { GoogleMapFrame } from "@/components/google-map-frame";
+import { saveTripSnapshot } from "@/lib/browser-saved-trips";
 import type { TripPlan, TripRequest } from "@/lib/types";
 
 type Props = {
   plan: TripPlan;
   request: TripRequest;
+  tripId?: string;
+  isLocalCopy?: boolean;
 };
 
 const timeIcons: Record<string, string> = {
@@ -17,7 +20,7 @@ const timeIcons: Record<string, string> = {
   evening: "🌙",
 };
 
-export function TripResults({ plan, request }: Props) {
+export function TripResults({ plan, request, tripId, isLocalCopy = false }: Props) {
   const [activeDay, setActiveDay] = useState(0);
   const [view, setView] = useState<"itinerary" | "dashboard">("itinerary");
   const [agentTraceOpen, setAgentTraceOpen] = useState(false);
@@ -26,6 +29,20 @@ export function TripResults({ plan, request }: Props) {
   const totalActivities = plan.dailyItinerary.length * 3;
   const mapQuery = request.destinationContext.selectedPlaceLabel || plan.destinationSummary.title;
   const mapPlaceId = request.destinationContext.selectedPlaceId;
+
+  useEffect(() => {
+    if (!tripId) {
+      return;
+    }
+
+    saveTripSnapshot({
+      id: tripId,
+      tripId,
+      savedAt: new Date().toISOString(),
+      request,
+      plan,
+    });
+  }, [plan, request, tripId]);
 
   return (
     <div>
@@ -49,6 +66,9 @@ export function TripResults({ plan, request }: Props) {
           </h1>
           <p className="text-white/70 mb-4 text-sm md:text-base">
             {plan.dailyItinerary.length} days · {request.travelerProfile.budgetBand} · {request.travelerProfile.interests.slice(0, 3).join(" & ")} focus
+          </p>
+          <p className="mb-4 text-xs text-coral-light">
+            {isLocalCopy ? "Loaded from this browser’s saved trips." : "Saved to this browser automatically after generation."}
           </p>
           <div className="flex flex-wrap gap-2">
             {request.travelerProfile.interests.slice(0, 4).map((interest) => (

@@ -12,5 +12,5 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
     notFound();
   }
 
-  return <TripResults plan={stored.plan} request={stored.request} />;
+  return <TripResults plan={stored.plan} request={stored.request} tripId={stored.id} />;
 }

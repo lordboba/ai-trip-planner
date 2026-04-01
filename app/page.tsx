@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { cookies } from "next/headers";
+import { HomeHero } from "@/components/home-hero";
+import { ACCESS_COOKIE_NAME, hasValidAccessCookie, isAccessGateEnabled } from "@/lib/access-gate";
 
 const stats = [
   { value: "6", label: "AI Agents" },
@@ -6,33 +8,21 @@ const stats = [
   { value: "4.8★", label: "Avg Rating" },
 ];
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const cookieStore = await cookies();
+  const gateEnabled = isAccessGateEnabled();
+  const isUnlocked = await hasValidAccessCookie(cookieStore.get(ACCESS_COOKIE_NAME)?.value);
+  const { next } = await searchParams;
+
   return (
     <main className="min-h-screen">
       {/* Gradient Hero */}
       <section className="bg-gradient-to-br from-warm-900 via-warm-600 to-coral-deep px-4 py-24 md:py-32 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-coral-light mb-4">
-          Powered by Claude AI
-        </p>
-        <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-4">
-          Where to next?
-        </h1>
-        <p className="text-white/70 max-w-md mx-auto mb-8 text-base md:text-lg">
-          Describe your dream trip. Our AI handles the rest — from hidden gems to dinner reservations.
-        </p>
-
-        {/* Search-style CTA */}
-        <div className="max-w-md mx-auto flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3">
-          <span className="flex-1 text-left text-white/50 text-sm">
-            Beach trip with friends in August...
-          </span>
-          <Link
-            href="/plan"
-            className="bg-coral text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-coral-deep transition-colors shrink-0"
-          >
-            Go
-          </Link>
-        </div>
+        <HomeHero gateEnabled={gateEnabled} isUnlocked={isUnlocked} nextPath={next} />
       </section>
 
       {/* Stats Bar */}
