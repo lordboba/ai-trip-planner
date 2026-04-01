@@ -57,11 +57,11 @@ export function HomeHero({ gateEnabled, isUnlocked, nextPath }: Props) {
       </p>
 
       {shouldShowGate ? (
-        <div className="max-w-md mx-auto rounded-2xl border border-white/20 bg-white/10 p-4 text-left backdrop-blur-md">
-          <label htmlFor="access-code" className="block text-xs font-semibold uppercase tracking-[0.18em] text-coral-light">
+        <div className="max-w-md mx-auto rounded-2xl border border-white/20 bg-white/10 p-3 text-left backdrop-blur-md">
+          <label htmlFor="access-code" className="sr-only">
             Access code
           </label>
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
             <input
               id="access-code"
               type="password"
@@ -73,21 +73,18 @@ export function HomeHero({ gateEnabled, isUnlocked, nextPath }: Props) {
                 }
               }}
               className="min-w-0 flex-1 rounded-xl border border-white/15 bg-white/90 px-4 py-3 text-sm text-warm-900 placeholder:text-warm-400 focus:outline-none focus:ring-2 focus:ring-coral/40"
-              placeholder="Enter the team access code"
+              placeholder="Enter code"
               autoComplete="current-password"
             />
             <button
               type="button"
               onClick={submitCode}
               disabled={!code.trim() || isPending}
-              className="rounded-xl bg-coral px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-coral-deep disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 rounded-xl bg-coral px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-coral-deep disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {isPending ? "Checking..." : "Unlock"}
+              {isPending ? "..." : "Go"}
             </button>
           </div>
-          <p className="mt-3 text-xs text-white/65">
-            The planner stays locked until a valid code is entered.
-          </p>
           {error && <p className="mt-2 text-xs text-red-200">{error}</p>}
         </div>
       ) : (
