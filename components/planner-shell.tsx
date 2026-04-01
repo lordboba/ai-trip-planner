@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSavedTrips, type SavedTripSnapshot } from "@/lib/browser-saved-trips";
 import type {
   BudgetBand,
@@ -83,6 +83,7 @@ function toggleValue(arr: string[], v: string) {
 
 export function PlannerShell() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ---- Calendar state ---- */
@@ -174,13 +175,66 @@ export function PlannerShell() {
     try {
       const res = await fetch("/api/calendar/google/connect", { method: "POST" });
       if (!res.ok) throw new Error("Google Calendar connection failed.");
-      const data = (await res.json()) as { message?: string };
+      const data = (await res.json()) as { message?: string; authorizeUrl?: string };
+
+      if (data.authorizeUrl) {
+        window.location.href = data.authorizeUrl;
+        return;
+      }
+
       setGoogleStatus(data.message ?? "Connected.");
     } catch (err) {
       setCalendarError(err instanceof Error ? err.message : "Google Calendar connection failed.");
     }
   }, []);
 
+
+
+  useEffect(() => {
+    const googleState = searchParams.get("googleCalendar");
+
+    if (googleState === "error") {
+      setCalendarError("Google Calendar authentication failed. Please try connecting again.");
+      return;
+    }
+
+    if (googleState !== "connected") {
+      return;
+    }
+
+    const importGoogle = async () => {
+      setCalendarError(null);
+      setGoogleStatus("Importing Google Calendar events...");
+
+      try {
+        const res = await fetch("/api/calendar/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: "google", startDate, endDate }),
+        });
+
+        if (!res.ok) {
+          const data = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(data?.error ?? "Google Calendar import failed.");
+        }
+
+        const imported = (await res.json()) as ImportedCalendar;
+        setImportedCalendar(imported);
+        setGoogleStatus(`Connected. Imported ${imported.events.length} Google Calendar events.`);
+
+        if (imported.events.length > 0) {
+          const sorted = [...imported.events].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+          setStartDate(sorted[0].startsAt.slice(0, 10));
+          setEndDate(sorted[sorted.length - 1].endsAt.slice(0, 10));
+        }
+      } catch (err) {
+        setCalendarError(err instanceof Error ? err.message : "Google Calendar import failed.");
+      }
+    };
+
+    void importGoogle();
+    router.replace("/");
+  }, [endDate, router, searchParams, startDate]);
   /* ---- Generate plan ---- */
   function generate() {
     if (!importedCalendar) return;

@@ -86,6 +86,19 @@ The Next.js API routes and trip pages now go through a backend adapter. With no 
 - Standalone backend server with the same trip creation and fetch endpoints
 - Structured workflow orchestration with validated step outputs, direct OpenAI/Claude backend calls, and a stored workflow trace
 
+
+## Google Calendar OAuth env vars
+
+To enable one-click Google Calendar auth and event import:
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
+```
+
+In Google Cloud Console, set the authorized redirect URI to match `GOOGLE_OAUTH_REDIRECT_URI` exactly.
+
 ## Next integration steps
 
 1. Replace the mock city catalog with Google Places-backed candidate retrieval and review normalization.

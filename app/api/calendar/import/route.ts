@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import { requireApiAccess } from "@/lib/server/access-gate-server";
+import { getGoogleAccessTokenFromCookies } from "@/lib/server/google-calendar-auth";
 import { importCalendarFile } from "@/lib/server/schedule-backend";
 
-type IcsInput = {
+type CalendarImportInput = {
   icsText: string | null;
   startDate: string | null;
   endDate: string | null;
+  source: "ics" | "google";
 };
 
-async function readIcsInput(request: Request): Promise<IcsInput> {
+async function readCalendarImportInput(request: Request): Promise<CalendarImportInput> {
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     const file = formData.get("file");
     const inline = formData.get("ics");
+    const source = formData.get("source");
     const startDate = formData.get("startDate");
     const endDate = formData.get("endDate");
 
@@ -28,6 +31,7 @@ async function readIcsInput(request: Request): Promise<IcsInput> {
       icsText,
       startDate: typeof startDate === "string" ? startDate : null,
       endDate: typeof endDate === "string" ? endDate : null,
+      source: source === "google" ? "google" : "ics",
     };
   }
 
@@ -35,12 +39,14 @@ async function readIcsInput(request: Request): Promise<IcsInput> {
     ics?: string;
     startDate?: string;
     endDate?: string;
+    source?: string;
   } | null;
 
   return {
     icsText: body?.ics?.trim() || null,
     startDate: body?.startDate ?? null,
     endDate: body?.endDate ?? null,
+    source: body?.source === "google" ? "google" : "ics",
   };
 }
 
@@ -53,15 +59,35 @@ export async function POST(request: Request) {
     return unauthorized;
   }
 
-  const { icsText, startDate, endDate } = await readIcsInput(request);
+  const { icsText, startDate, endDate, source } = await readCalendarImportInput(request);
 
-  if (!icsText) {
+  if (source === "ics" && !icsText) {
     return NextResponse.json(
       { error: "Upload an .ics file or send calendar text in the request body." },
       { status: 400 },
     );
   }
 
-  const imported = await importCalendarFile({ icsText, source: "ics", startDate, endDate });
+  if (source === "google") {
+    const googleAccessToken = await getGoogleAccessTokenFromCookies();
+
+    if (!googleAccessToken) {
+      return NextResponse.json(
+        { error: "Google Calendar is not connected. Connect your Google account first." },
+        { status: 401 },
+      );
+    }
+
+    const imported = await importCalendarFile({
+      source,
+      startDate,
+      endDate,
+      googleAccessToken,
+    });
+
+    return NextResponse.json(imported);
+  }
+
+  const imported = await importCalendarFile({ icsText: icsText ?? undefined, source, startDate, endDate });
   return NextResponse.json(imported);
 }

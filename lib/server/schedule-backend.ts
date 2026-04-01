@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { importedCalendarSchema, schedulePlanSchema, schedulePlanRequestSchema } from "@/backend/src/domain/schedule-plans";
 import { importCalendarFromIcsText } from "@/backend/src/services/calendar-import-service";
+import { importCalendarFromGoogleEvents } from "@/backend/src/services/google-calendar";
+import { createGoogleAuthorizeUrl } from "@/lib/server/google-calendar-auth";
 import {
   addSuggestionToSchedulePlan,
   createSchedulePlan,
@@ -17,6 +19,7 @@ const googleConnectResponseSchema = z.object({
   provider: z.literal("google-calendar"),
   status: z.literal("ready"),
   message: z.string(),
+  authorizeUrl: z.string().url().optional(),
 });
 
 function getBackendUrl() {
@@ -30,15 +33,37 @@ function getBackendUrl() {
 }
 
 export async function importCalendarFile(input: {
-  icsText: string;
+  icsText?: string;
   source?: "ics" | "google";
   startDate?: string | null;
   endDate?: string | null;
+  googleAccessToken?: string | null;
 }) {
   const backendUrl = getBackendUrl();
 
   if (!backendUrl) {
-    return importCalendarFromIcsText(input);
+    if (input.source === "google") {
+      if (!input.googleAccessToken) {
+        throw new Error("Google Calendar access token is missing.");
+      }
+
+      return importCalendarFromGoogleEvents({
+        accessToken: input.googleAccessToken,
+        startDate: input.startDate,
+        endDate: input.endDate,
+      });
+    }
+
+    if (!input.icsText) {
+      throw new Error("ICS content is required for non-Google calendar imports.");
+    }
+
+    return importCalendarFromIcsText({
+      icsText: input.icsText,
+      source: input.source,
+      startDate: input.startDate,
+      endDate: input.endDate,
+    });
   }
 
   const response = await fetch(`${backendUrl}/api/calendar/import`, {
@@ -47,7 +72,7 @@ export async function importCalendarFile(input: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      ics: input.icsText,
+      ics: input.icsText ?? null,
       source: input.source ?? "ics",
       startDate: input.startDate ?? null,
       endDate: input.endDate ?? null,
@@ -137,11 +162,14 @@ export async function connectGoogleCalendar(requestCookieHeader?: string) {
   const backendUrl = getBackendUrl();
 
   if (!backendUrl) {
+    const authorizeUrl = await createGoogleAuthorizeUrl();
+
     return googleConnectResponseSchema.parse({
       ok: true,
       provider: "google-calendar",
       status: "ready",
-      message: "Google Calendar connection is reserved for authenticated users. Upload an .ics file for now while direct sync is offline.",
+      message: "Google Calendar OAuth is ready.",
+      authorizeUrl,
     });
   }
 
