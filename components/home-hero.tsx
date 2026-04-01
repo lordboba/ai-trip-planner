@@ -46,14 +46,14 @@ export function HomeHero({ gateEnabled, isUnlocked, nextPath }: Props) {
 
   return (
     <>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-coral-light mb-4">
-        Powered by Claude AI
+      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-coral-light mb-6">
+        Work trips, unlocked
       </p>
-      <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-4">
-        Where to next?
+      <h1 className="max-w-md mx-auto text-3xl md:text-5xl font-extrabold text-white mb-6 leading-[1.15]">
+        Hidden gems between your meetings.
       </h1>
-      <p className="text-white/70 max-w-md mx-auto mb-8 text-base md:text-lg">
-        Describe your dream trip. Our AI handles the rest, from hidden gems to dinner reservations.
+      <p className="text-white/60 max-w-sm mx-auto mb-14 text-sm md:text-base leading-relaxed">
+        Drop your work calendar in and we surface the best spots that fit your free hours.
       </p>
 
       {shouldShowGate ? (
@@ -93,13 +93,13 @@ export function HomeHero({ gateEnabled, isUnlocked, nextPath }: Props) {
       ) : (
         <div className="max-w-md mx-auto flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3">
           <span className="flex-1 text-left text-white/50 text-sm">
-            Beach trip with friends in August...
+            Conference week in Austin, a few hours free...
           </span>
           <Link
             href="/plan"
             className="bg-coral text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-coral-deep transition-colors shrink-0"
           >
-            Go
+            Start planning
           </Link>
         </div>
       )}

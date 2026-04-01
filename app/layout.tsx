@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Tripwise — AI Trip Planner",
-  description: "AI-powered trip planning with personalized itineraries backed by real reviews.",
+  title: "Tripwise — Hidden Gems in Your Work Trip Gaps",
+  description: "Drop your work calendar and discover the best spots to explore between meetings. Save time, skip the research, find hidden gems.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
