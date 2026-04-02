@@ -65,7 +65,10 @@ export async function createGoogleAuthorizeUrl(input?: { startDate?: string | nu
     client_id: getGoogleClientId(),
     redirect_uri: getGoogleRedirectUri(),
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/calendar.readonly",
+    scope: [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events",
+    ].join(" "),
     access_type: "offline",
     include_granted_scopes: "true",
     prompt: "consent",

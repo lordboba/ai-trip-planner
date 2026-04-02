@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAccess } from "@/lib/server/access-gate-server";
 import { fetchSchedulePlanRecord } from "@/lib/server/schedule-backend";
+import { sanitizePlanForClient } from "@/lib/sanitize-plan-response";
 
 export const maxDuration = 300;
 
@@ -18,5 +19,5 @@ export async function GET(_: Request, { params }: { params: Promise<{ planId: st
     return NextResponse.json({ error: "Schedule plan not found" }, { status: 404 });
   }
 
-  return NextResponse.json(stored);
+  return NextResponse.json(sanitizePlanForClient(stored));
 }

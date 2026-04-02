@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireApiAccess } from "@/lib/server/access-gate-server";
 import { addSuggestionToSchedulePlanRecord } from "@/lib/server/schedule-backend";
+import { createGoogleCalendarEvent } from "@/lib/server/google-calendar-write";
+import { sanitizePlanForClient } from "@/lib/sanitize-plan-response";
+import { resolveTimeZone } from "@/lib/timezone";
 
 export const maxDuration = 300;
 
@@ -24,5 +27,37 @@ export async function POST(
     );
   }
 
-  return NextResponse.json(updated);
+  const addedSuggestion = updated.suggestions.find(
+    (suggestion) => suggestion.id === suggestionId && suggestion.status === "added",
+  );
+
+  let calendarEventCreated = false;
+
+  if (addedSuggestion) {
+    const timeZone = resolveTimeZone(
+      updated.tripContext.timezone ?? updated.request.importedSchedule.timezone,
+    );
+    const description = [
+      addedSuggestion.message,
+      addedSuggestion.agentReason,
+      addedSuggestion.budgetReason,
+      addedSuggestion.place.googleMapsUri,
+      addedSuggestion.place.reviewSummary,
+    ].filter(Boolean).join("\n\n");
+    const result = await createGoogleCalendarEvent({
+      summary: addedSuggestion.place.name,
+      description,
+      location: addedSuggestion.place.address ?? "",
+      startTime: addedSuggestion.startsAt,
+      endTime: addedSuggestion.endsAt,
+      timeZone,
+    });
+
+    calendarEventCreated = result.success;
+  }
+
+  return NextResponse.json({
+    ...sanitizePlanForClient(updated),
+    calendarEventCreated,
+  });
 }
