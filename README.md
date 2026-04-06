@@ -162,3 +162,15 @@ GOOGLE_PLACES_LANGUAGE_CODE=en
 ```
 
 If `GOOGLE_PLACES_API_KEY` is missing, the planner falls back to deterministic place candidates and still returns a full schedule plan.
+
+## Google Maps env vars
+
+The web trip map will render live pins and routes when:
+
+```bash
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...
+GOOGLE_MAPS_MAP_ID=...
+```
+
+Use a browser-restricted key for `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` with `Maps JavaScript API` and `Routes API` enabled.
+Keep `GOOGLE_PLACES_API_KEY` as a separate server-side key for Places requests.

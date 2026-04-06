@@ -17,7 +17,17 @@ type Props = {
   initialPlan: ClientSchedulePlan;
   googleMapsApiKey: string;
   googleMapsMapId: string;
+  resolvedEventPins: Array<{
+    eventId: string;
+    lat: number;
+    lng: number;
+    label: string;
+    address?: string;
+    googleMapsUri?: string;
+  }>;
 };
+
+type ResolvedEventPin = Props["resolvedEventPins"][number];
 
 function buildDayGroups(plan: SchedulePlan, timeZone: string) {
   const addedEventIds = new Set(
@@ -67,13 +77,35 @@ function buildDayGroups(plan: SchedulePlan, timeZone: string) {
   }));
 }
 
-function buildPinsForDay(items: DayTimelineItem[], dayIndex: number): MapPin[] {
+function truncateMapLabel(label: string) {
+  return label.length > 16 ? `${label.slice(0, 14)}…` : label;
+}
+
+function buildPinsForDay(
+  items: DayTimelineItem[],
+  dayIndex: number,
+  eventPinsById: ReadonlyMap<string, ResolvedEventPin>,
+): MapPin[] {
   const dayColor = getDayColor(dayIndex);
   let pinNumber = 1;
 
   return items.flatMap((item) => {
     if (item.kind === "event") {
-      return [];
+      const resolvedPin = eventPinsById.get(item.event.id);
+
+      if (!resolvedPin) {
+        return [];
+      }
+
+      return [{
+        id: item.id,
+        lat: resolvedPin.lat,
+        lng: resolvedPin.lng,
+        label: truncateMapLabel(resolvedPin.label),
+        number: pinNumber++,
+        isSuggestion: false,
+        dayColor,
+      }];
     }
 
     const { lat, lng, name } = item.suggestion.place;
@@ -86,7 +118,7 @@ function buildPinsForDay(items: DayTimelineItem[], dayIndex: number): MapPin[] {
       id: item.suggestion.id,
       lat,
       lng,
-      label: name.length > 16 ? `${name.slice(0, 14)}…` : name,
+      label: truncateMapLabel(name),
       number: pinNumber++,
       isSuggestion: item.kind === "pending-suggestion",
       dayColor,
@@ -105,7 +137,7 @@ function buildRoutesForDay(pins: MapPin[], dayIndex: number) {
   }];
 }
 
-export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId }: Props) {
+export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId, resolvedEventPins }: Props) {
   const [plan, setPlan] = useState(initialPlan);
   const [activeTab, setActiveTab] = useState(-1);
   const [pendingSuggestionId, setPendingSuggestionId] = useState<string | null>(null);
@@ -123,6 +155,10 @@ export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId
   const city = plan.tripContext.cityInference.city ?? "Imported trip";
   const pendingSuggestions = plan.suggestions.filter((suggestion) => suggestion.status === "pending");
   const addedSuggestions = plan.suggestions.filter((suggestion) => suggestion.status === "added");
+  const eventPinsById = useMemo(
+    () => new Map(resolvedEventPins.map((pin) => [pin.eventId, pin])),
+    [resolvedEventPins],
+  );
 
   const overviewDayIndex = activeTab === -1 ? hoveredDayIndex : null;
   const overviewGroup = overviewDayIndex !== null ? dayGroups[overviewDayIndex] : null;
@@ -130,25 +166,25 @@ export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId
   const mapPins = useMemo(() => {
     if (activeTab === -1) {
       if (overviewGroup) {
-        return buildPinsForDay(overviewGroup.items, overviewGroup.dayIndex);
+        return buildPinsForDay(overviewGroup.items, overviewGroup.dayIndex, eventPinsById);
       }
 
-      return dayGroups.flatMap((group) => buildPinsForDay(group.items, group.dayIndex));
+      return dayGroups.flatMap((group) => buildPinsForDay(group.items, group.dayIndex, eventPinsById));
     }
 
     const group = dayGroups[activeTab];
-    return group ? buildPinsForDay(group.items, group.dayIndex) : [];
-  }, [activeTab, dayGroups, overviewGroup]);
+    return group ? buildPinsForDay(group.items, group.dayIndex, eventPinsById) : [];
+  }, [activeTab, dayGroups, eventPinsById, overviewGroup]);
 
   const mapRoutes = useMemo(() => {
     if (activeTab === -1) {
       if (overviewGroup) {
-        const pins = buildPinsForDay(overviewGroup.items, overviewGroup.dayIndex);
+        const pins = buildPinsForDay(overviewGroup.items, overviewGroup.dayIndex, eventPinsById);
         return buildRoutesForDay(pins, overviewGroup.dayIndex);
       }
 
       return dayGroups.flatMap((group) => {
-        const pins = buildPinsForDay(group.items, group.dayIndex);
+        const pins = buildPinsForDay(group.items, group.dayIndex, eventPinsById);
         return buildRoutesForDay(pins, group.dayIndex);
       });
     }
@@ -159,9 +195,25 @@ export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId
       return [];
     }
 
-    const pins = buildPinsForDay(group.items, group.dayIndex);
+    const pins = buildPinsForDay(group.items, group.dayIndex, eventPinsById);
     return buildRoutesForDay(pins, group.dayIndex);
-  }, [activeTab, dayGroups, overviewGroup]);
+  }, [activeTab, dayGroups, eventPinsById, overviewGroup]);
+
+  const activeDayMapLabels = useMemo(() => {
+    if (activeTab === -1) {
+      return new Map<string, number>();
+    }
+
+    const group = dayGroups[activeTab];
+
+    if (!group) {
+      return new Map<string, number>();
+    }
+
+    return new Map(
+      buildPinsForDay(group.items, group.dayIndex, eventPinsById).map((pin) => [pin.id, pin.number] as const),
+    );
+  }, [activeTab, dayGroups, eventPinsById]);
 
   const legendItems = useMemo(() => {
     if (activeTab !== -1 || overviewGroup) {
@@ -281,6 +333,7 @@ export function TripResultsPage({ initialPlan, googleMapsApiKey, googleMapsMapId
                   timeZone={scheduleTimeZone}
                   pendingSuggestionId={pendingSuggestionId}
                   calendarAddedIds={calendarAddedIds}
+                  mapLabelByItemId={activeDayMapLabels}
                   onAddSuggestion={addSuggestion}
                   onItemHover={setHighlightedPinId}
                 />

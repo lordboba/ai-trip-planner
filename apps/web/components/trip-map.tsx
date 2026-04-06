@@ -169,7 +169,7 @@ export function TripMap({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-warm-400">Map unavailable</p>
           <p className="mt-3 max-w-sm text-sm leading-6 text-warm-600">
-            Set `GOOGLE_PLACES_API_KEY` to enable the live itinerary map and route rendering.
+            Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to enable the live itinerary map and route rendering.
           </p>
         </div>
       </div>

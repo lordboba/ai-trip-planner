@@ -30,6 +30,7 @@ type SuggestionCardProps = {
   timeZone: string;
   isExpanded: boolean;
   isPending: boolean;
+  mapLabel?: number;
   onToggle: () => void;
   onAdd: () => void;
   onHover: (hovered: boolean) => void;
@@ -40,6 +41,7 @@ export function SuggestionCard({
   timeZone,
   isExpanded,
   isPending,
+  mapLabel,
   onToggle,
   onAdd,
   onHover,
@@ -63,7 +65,14 @@ export function SuggestionCard({
               {icon}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-warm-900">{suggestion.place.name}</div>
+              <div className="flex items-center gap-2">
+                {typeof mapLabel === "number" && (
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-coral text-[10px] font-semibold text-white">
+                    {mapLabel}
+                  </div>
+                )}
+                <div className="truncate text-[13px] font-semibold text-warm-900">{suggestion.place.name}</div>
+              </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-warm-400">
                 <span className="font-semibold text-coral">★ {suggestion.place.rating.toFixed(1)}</span>
                 <span>· {suggestion.category}</span>

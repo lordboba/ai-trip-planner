@@ -6,10 +6,11 @@ import { formatScheduleTimeRange, titleCaseEventType } from "@/lib/schedule-form
 type LockedEventCardProps = {
   event: NormalizedCalendarEvent;
   timeZone: string;
+  mapLabel?: number;
   onHover: (hovered: boolean) => void;
 };
 
-export function LockedEventCard({ event, timeZone, onHover }: LockedEventCardProps) {
+export function LockedEventCard({ event, timeZone, mapLabel, onHover }: LockedEventCardProps) {
   return (
     <div className="flex items-start gap-3" onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
       <div className="mt-1 min-h-[52px] w-[3px] rounded-sm bg-warm-900" />
@@ -17,7 +18,14 @@ export function LockedEventCard({ event, timeZone, onHover }: LockedEventCardPro
         <div className="text-[11px] text-warm-400">
           {formatScheduleTimeRange(event.startsAt, event.endsAt, event.isAllDay, event.timezone ?? timeZone)}
         </div>
-        <div className="mt-1 text-sm font-semibold text-warm-900">{event.title}</div>
+        <div className="mt-1 flex items-center gap-2">
+          {typeof mapLabel === "number" && (
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warm-900 text-[10px] font-semibold text-white">
+              {mapLabel}
+            </div>
+          )}
+          <div className="text-sm font-semibold text-warm-900">{event.title}</div>
+        </div>
         {event.location ? (
           <div className="mt-1 text-[11px] text-warm-400">{event.location}</div>
         ) : (

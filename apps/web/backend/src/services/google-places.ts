@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { BudgetBand, PlaceCandidate } from "../domain/planning.ts";
-import type { ScheduleGapKind } from "../domain/schedule-plans.ts";
+import type { NormalizedCalendarEvent, ScheduleGapKind } from "../domain/schedule-plans.ts";
 
 const reviewTextSchema = z.object({
   text: z.string().optional(),
@@ -70,6 +70,15 @@ export type SlotPlaceLookupParams = {
   durationMinutes: number;
   previousEventTitle?: string | null;
   nextEventTitle?: string | null;
+};
+
+export type TimelineEventMapPin = {
+  eventId: string;
+  lat: number;
+  lng: number;
+  label: string;
+  address?: string;
+  googleMapsUri?: string;
 };
 
 const TEXT_SEARCH_FIELD_MASK = [
@@ -178,6 +187,31 @@ function dedupePlaces(places: readonly PlaceCandidate[]) {
   }
 
   return output;
+}
+
+function normalizeLookupKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function appendLocationContext(base: string, extra: string | null | undefined) {
+  const trimmedExtra = extra?.trim();
+
+  if (!trimmedExtra) {
+    return base;
+  }
+
+  return base.toLowerCase().includes(trimmedExtra.toLowerCase()) ? base : `${base}, ${trimmedExtra}`;
+}
+
+function buildEventLocationQuery(event: NormalizedCalendarEvent, fallbackCity?: string | null) {
+  const location = event.location?.trim();
+
+  if (!location) {
+    return null;
+  }
+
+  const withInferredCity = appendLocationContext(location, event.inferredCity);
+  return appendLocationContext(withInferredCity, fallbackCity);
 }
 
 function priceBandScore(priceBand: string) {
@@ -360,4 +394,63 @@ export async function fetchSlotPlaceCandidates(params: SlotPlaceLookupParams) {
       reason: error instanceof Error ? error.message : "Google Places lookup failed.",
     };
   }
+}
+
+export async function resolveTimelineEventMapPins(input: {
+  events: readonly NormalizedCalendarEvent[];
+  fallbackCity?: string | null;
+}) {
+  if (!isGooglePlacesConfigured()) {
+    return [] as TimelineEventMapPin[];
+  }
+
+  const lookupPromises = new Map<string, Promise<PlaceCandidate | null>>();
+
+  for (const event of input.events) {
+    const query = buildEventLocationQuery(event, input.fallbackCity);
+
+    if (!query) {
+      continue;
+    }
+
+    const key = normalizeLookupKey(query);
+
+    if (!lookupPromises.has(key)) {
+      lookupPromises.set(
+        key,
+        searchPlacesText({ textQuery: query, maxResultCount: 1 })
+          .then((places) => places[0] ?? null)
+          .catch(() => null),
+      );
+    }
+  }
+
+  const resolvedLookups = new Map<string, PlaceCandidate | null>(
+    await Promise.all(
+      [...lookupPromises.entries()].map(async ([key, promise]) => [key, await promise] as const),
+    ),
+  );
+
+  return input.events.flatMap((event) => {
+    const query = buildEventLocationQuery(event, input.fallbackCity);
+
+    if (!query) {
+      return [];
+    }
+
+    const match = resolvedLookups.get(normalizeLookupKey(query));
+
+    if (!match) {
+      return [];
+    }
+
+    return [{
+      eventId: event.id,
+      lat: match.lat,
+      lng: match.lng,
+      label: match.name,
+      address: match.address,
+      googleMapsUri: match.googleMapsUri,
+    } satisfies TimelineEventMapPin];
+  });
 }

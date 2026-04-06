@@ -16,6 +16,7 @@ type DayTabProps = {
   timeZone: string;
   pendingSuggestionId: string | null;
   calendarAddedIds: Set<string>;
+  mapLabelByItemId: ReadonlyMap<string, number>;
   onAddSuggestion: (suggestionId: string) => void;
   onItemHover: (itemId: string | null) => void;
 };
@@ -25,6 +26,7 @@ export function DayTab({
   timeZone,
   pendingSuggestionId,
   calendarAddedIds,
+  mapLabelByItemId,
   onAddSuggestion,
   onItemHover,
 }: DayTabProps) {
@@ -39,6 +41,7 @@ export function DayTab({
               key={item.id}
               event={item.event}
               timeZone={timeZone}
+              mapLabel={mapLabelByItemId.get(item.id)}
               onHover={(hovered) => onItemHover(hovered ? item.id : null)}
             />
           );
@@ -51,6 +54,7 @@ export function DayTab({
               suggestion={item.suggestion}
               timeZone={timeZone}
               calendarAdded={calendarAddedIds.has(item.suggestion.id)}
+              mapLabel={mapLabelByItemId.get(item.id)}
               onHover={(hovered) => onItemHover(hovered ? item.id : null)}
             />
           );
@@ -63,6 +67,7 @@ export function DayTab({
             timeZone={timeZone}
             isExpanded={expandedSuggestionId === item.suggestion.id}
             isPending={pendingSuggestionId === item.suggestion.id}
+            mapLabel={mapLabelByItemId.get(item.id)}
             onToggle={() => {
               setExpandedSuggestionId((current) => current === item.suggestion.id ? null : item.suggestion.id);
             }}
