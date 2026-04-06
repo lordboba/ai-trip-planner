@@ -70,6 +70,8 @@ export type SlotPlaceLookupParams = {
   durationMinutes: number;
   previousEventTitle?: string | null;
   nextEventTitle?: string | null;
+  previousEventLocation?: string | null;
+  nextEventLocation?: string | null;
 };
 
 export type TimelineEventMapPin = {
@@ -339,17 +341,29 @@ export async function autocompleteDestinationSearch(input: string, sessionToken?
 }
 
 function slotAnchor(params: SlotPlaceLookupParams) {
-  return params.city?.trim() || "the city center";
+  const locationHint = params.previousEventLocation?.trim() || params.nextEventLocation?.trim();
+  return appendLocationContext(locationHint || params.city?.trim() || "the city center", params.city);
+}
+
+function journeyContext(params: SlotPlaceLookupParams) {
+  const previous = params.previousEventLocation?.trim() || params.previousEventTitle?.trim() || null;
+  const next = params.nextEventLocation?.trim() || params.nextEventTitle?.trim() || null;
+
+  if (previous && next && previous.toLowerCase() !== next.toLowerCase()) {
+    return `${previous} and ${next}`;
+  }
+
+  return previous || next;
 }
 
 function mealQueries(params: SlotPlaceLookupParams) {
   const anchor = slotAnchor(params);
-  const context = [params.previousEventTitle, params.nextEventTitle].filter(Boolean).join(" and ");
+  const context = journeyContext(params);
 
   return [
-    `best restaurants in ${anchor}`,
-    `best cafes in ${anchor}`,
-    context ? `reliable restaurants near ${context} in ${anchor}` : `reliable lunch spots in ${anchor}`,
+    `best restaurants near ${anchor}`,
+    `best cafes near ${anchor}`,
+    context ? `reliable restaurants between ${context} near ${anchor}` : `reliable lunch spots near ${anchor}`,
   ];
 }
 
@@ -361,6 +375,11 @@ function quickStopQueries(params: SlotPlaceLookupParams) {
     : ["best cafes in {anchor}", "best neighborhood spots in {anchor}"];
 
   const resolved = uniqueTemplates.map((template) => template.replaceAll("{anchor}", anchor));
+  const journey = journeyContext(params);
+
+  if (journey) {
+    resolved.push(`best quick detours near ${journey} in ${anchor}`);
+  }
 
   if (params.durationMinutes >= 75) {
     resolved.push(`best things to do in ${anchor}`);

@@ -1,3 +1,41 @@
 @import "tailwindcss";
 
 @config "../tailwind.config.ts";
+
+@keyframes loading-spin-bar {
+  0% {
+    transform: translateX(-140%) rotate(-160deg);
+  }
+
+  50% {
+    transform: translateX(140%) rotate(160deg);
+  }
+
+  100% {
+    transform: translateX(-140%) rotate(520deg);
+  }
+}
+
+.loading-spin-bar {
+  position: relative;
+  height: 0.75rem;
+  width: min(15rem, 100%);
+  overflow: hidden;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, rgba(231, 224, 218, 0.95), rgba(248, 232, 222, 0.95));
+}
+
+.loading-spin-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 100%;
+  width: 38%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #e27c58, #ef9b7f 55%, #f4c6b4);
+  box-shadow: 0 0 24px rgba(226, 124, 88, 0.32);
+  transform-origin: center;
+  transform: translate(-140%, -50%) rotate(-160deg);
+  animation: loading-spin-bar 1.15s ease-in-out infinite;
+}

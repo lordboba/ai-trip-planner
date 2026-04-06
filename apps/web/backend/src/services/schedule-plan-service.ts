@@ -134,6 +134,15 @@ type SlotCandidateResolution = {
 };
 
 type ItineraryDraft = z.infer<typeof itineraryAgentOutputSchema>["suggestions"][number];
+type CommutePlan = {
+  outboundBufferMinutes: number;
+  inboundBufferMinutes: number;
+  totalBufferMinutes: number;
+  maxOneWayMinutes: number;
+  activityMinutesAvailable: number;
+  routingRule: string;
+  trafficAssumption: string;
+};
 
 function sortEvents(events: readonly NormalizedCalendarEvent[]) {
   return [...events].sort((left, right) => (
@@ -147,6 +156,30 @@ function minutesBetween(startIso: string, endIso: string) {
 
 function unique<T>(items: readonly T[]) {
   return [...new Set(items)];
+}
+
+function uniqueStrings(items: ReadonlyArray<string | null | undefined>) {
+  const seen = new Set<string>();
+  const values: string[] = [];
+
+  for (const item of items) {
+    const trimmed = item?.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    const key = trimmed.toLowerCase();
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    values.push(trimmed);
+  }
+
+  return values;
 }
 
 function deriveTripContext(importedSchedule: ImportedCalendar): ScheduleTripContext {
@@ -365,32 +398,132 @@ function primaryInterest(preferences: SchedulePlanPreferences) {
 }
 
 function transportNote(preferences: SchedulePlanPreferences, slot: ScheduleSlot) {
+  const commute = commutePlan(preferences, slot);
+
   if (preferences.transport === "walk") {
-    return "Keep it walkable so the return path stays low-risk.";
+    return `Keep it within about ${commute.maxOneWayMinutes} walking minutes each way and protect ${commute.totalBufferMinutes} minutes for the walk in and back.`;
   }
 
   if (preferences.transport === "transit") {
-    return slot.durationMinutes >= 60
-      ? "A short transit hop still fits if the stop stays close to the line."
-      : "Stay on the same transit spine to avoid burning the gap.";
+    return `Stay on one simple line, cap the ride at roughly ${commute.maxOneWayMinutes} minutes each way, and leave ${commute.totalBufferMinutes} minutes for platform waits and transit slack.`;
   }
 
   if (preferences.transport === "rideshare") {
-    return "This works best as one direct rideshare out and back.";
+    return `Assume up to ${commute.maxOneWayMinutes} minutes each way and leave ${commute.totalBufferMinutes} minutes for pickup delays and traffic.`;
   }
 
   if (preferences.transport === "rental-car") {
-    return "Choose something with easy parking and a clean exit.";
+    return `Keep the drive to about ${commute.maxOneWayMinutes} minutes each way and hold ${commute.totalBufferMinutes} minutes for parking, traffic, and the exit.`;
   }
 
-  return "Keep the routing tight so the gap still feels comfortable.";
+  return `Keep the routing simple, stay within about ${commute.maxOneWayMinutes} minutes each way, and preserve ${commute.totalBufferMinutes} minutes for transfers and traffic.`;
 }
 
-function suggestionWindow(slot: ScheduleSlot, preferredMinutes: number) {
-  const slotStart = Date.parse(slot.startsAt);
-  const slotEnd = Date.parse(slot.endsAt);
-  const duration = Math.min(preferredMinutes, slot.durationMinutes);
-  const padding = Math.max(0, Math.floor((slot.durationMinutes - duration) / 2));
+function commutePlan(preferences: SchedulePlanPreferences, slot: ScheduleSlot): CommutePlan {
+  const activeLegs = Number(Boolean(slot.previousEventId)) + Number(Boolean(slot.nextEventId)) || 1;
+  const desiredOneWayMinutes = preferences.transport === "walk"
+    ? slot.durationMinutes >= 90 ? 12 : 10
+    : preferences.transport === "transit"
+      ? slot.durationMinutes >= 90 ? 18 : 15
+      : preferences.transport === "rideshare"
+        ? slot.durationMinutes >= 90 ? 14 : 12
+        : preferences.transport === "rental-car"
+          ? slot.durationMinutes >= 90 ? 16 : 14
+          : slot.durationMinutes >= 90 ? 15 : 12;
+  const extraSlackMinutes = preferences.transport === "walk"
+    ? 0
+    : preferences.transport === "transit"
+      ? 4
+      : preferences.transport === "rideshare"
+        ? 5
+        : preferences.transport === "rental-car"
+          ? 7
+          : 5;
+  const maxOneWayMinutes = desiredOneWayMinutes + extraSlackMinutes;
+  const desiredBufferPerLeg = maxOneWayMinutes;
+  const maxTotalBuffer = Math.max(0, slot.durationMinutes - 20);
+  const totalBufferMinutes = Math.min(desiredBufferPerLeg * activeLegs, maxTotalBuffer);
+  const hasPrevious = Boolean(slot.previousEventId);
+  const hasNext = Boolean(slot.nextEventId);
+  let outboundBufferMinutes = 0;
+  let inboundBufferMinutes = 0;
+
+  if (hasPrevious && hasNext) {
+    outboundBufferMinutes = Math.ceil(totalBufferMinutes / 2);
+    inboundBufferMinutes = Math.floor(totalBufferMinutes / 2);
+  } else if (hasPrevious || (!hasPrevious && !hasNext)) {
+    outboundBufferMinutes = totalBufferMinutes;
+  } else {
+    inboundBufferMinutes = totalBufferMinutes;
+  }
+
+  const activityMinutesAvailable = Math.max(20, slot.durationMinutes - totalBufferMinutes);
+
+  if (preferences.transport === "walk") {
+    return {
+      outboundBufferMinutes,
+      inboundBufferMinutes,
+      totalBufferMinutes,
+      maxOneWayMinutes,
+      activityMinutesAvailable,
+      routingRule: "Choose a stop that is comfortably walkable from the locked events on either side.",
+      trafficAssumption: "Walking time should stay forgiving enough that a slow block or wrong turn does not break the day.",
+    };
+  }
+
+  if (preferences.transport === "transit") {
+    return {
+      outboundBufferMinutes,
+      inboundBufferMinutes,
+      totalBufferMinutes,
+      maxOneWayMinutes,
+      activityMinutesAvailable,
+      routingRule: "Prefer one-seat transit routes or stops on the same line as the rest of the day.",
+      trafficAssumption: "Assume headway variance, platform waits, and one small delay before the next locked event.",
+    };
+  }
+
+  if (preferences.transport === "rideshare") {
+    return {
+      outboundBufferMinutes,
+      inboundBufferMinutes,
+      totalBufferMinutes,
+      maxOneWayMinutes,
+      activityMinutesAvailable,
+      routingRule: "Prefer direct out-and-back rides with clean pickup and drop-off access.",
+      trafficAssumption: "Assume moderate street traffic and a little pickup friction on each leg.",
+    };
+  }
+
+  if (preferences.transport === "rental-car") {
+    return {
+      outboundBufferMinutes,
+      inboundBufferMinutes,
+      totalBufferMinutes,
+      maxOneWayMinutes,
+      activityMinutesAvailable,
+      routingRule: "Only choose stops with straightforward parking and a fast route back into the schedule.",
+      trafficAssumption: "Assume moderate traffic plus time to park and get back to the car.",
+    };
+  }
+
+  return {
+    outboundBufferMinutes,
+    inboundBufferMinutes,
+    totalBufferMinutes,
+    maxOneWayMinutes,
+    activityMinutesAvailable,
+    routingRule: "Keep transfers simple and avoid routing that depends on perfect timing.",
+    trafficAssumption: "Assume a modest commute buffer so one slow transfer does not collapse the next event.",
+  };
+}
+
+function suggestionWindow(slot: ScheduleSlot, preferredMinutes: number, commute: CommutePlan) {
+  const slotStart = Date.parse(slot.startsAt) + commute.outboundBufferMinutes * 60000;
+  const slotEnd = Date.parse(slot.endsAt) - commute.inboundBufferMinutes * 60000;
+  const availableMinutes = Math.max(20, Math.round((slotEnd - slotStart) / 60000));
+  const duration = Math.max(20, Math.min(preferredMinutes, availableMinutes));
+  const padding = Math.max(0, Math.floor((availableMinutes - duration) / 2));
   const start = new Date(slotStart + padding * 60000).toISOString();
   const end = new Date(Math.min(slotEnd, Date.parse(start) + duration * 60000)).toISOString();
   return { startsAt: start, endsAt: end, durationMinutes: minutesBetween(start, end) };
@@ -443,32 +576,84 @@ function fallbackPriceBands(budgetBand: BudgetBand) {
 }
 
 function fallbackPlaceNames(context: SlotContext, preferences: SchedulePlanPreferences) {
-  const area = context.areaLabel === "your route" ? "Local" : context.areaLabel;
+  const area = (context.areaLabel === "your route"
+    ? context.previousEvent?.inferredCity ?? context.nextEvent?.inferredCity ?? "Local"
+    : context.areaLabel)
+    .split(",")[0]
+    .trim();
 
   if (context.slot.kind === "meal-window") {
     return [
-      `${area} Market Table`,
-      `${area} Daily Cafe`,
-      `${area} Corner Kitchen`,
+      `${area} Supper Club`,
+      `${area} Kitchen`,
+      `${area} Cafe`,
     ];
   }
 
   const profile = INTEREST_PROFILES[primaryInterest(preferences)];
-  const suffixes = profile.queries;
+  const suffixes = profile.category === "cafe"
+    ? ["Roastery", "Bakehouse", "Coffee Bar"]
+    : profile.category === "bar"
+      ? ["Listening Bar", "Wine Room", "Cocktail Club"]
+      : profile.category === "park"
+        ? ["Gardens", "Promenade", "Green"]
+        : profile.category === "gallery"
+          ? ["Gallery", "Studio", "House"]
+          : profile.category === "boutique"
+            ? ["Market", "Boutique", "Atelier"]
+            : profile.category === "tea house"
+              ? ["Tea Room", "Courtyard", "Wellness Lounge"]
+              : profile.category === "viewpoint"
+                ? ["Lookout", "Terrace", "Scenic Point"]
+                : ["Passage", "Corner", "Clubhouse"];
 
-  return suffixes.map((suffix, index) => {
-    const title = suffix.split(" ").map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
-    return `${area} ${title} ${index + 1}`;
-  });
+  return suffixes.map((suffix) => `${area} ${suffix}`);
 }
 
 function decorateReason(place: PlaceCandidate, context: SlotContext, preferences: SchedulePlanPreferences) {
+  const commute = commutePlan(preferences, context.slot);
+
   if (context.slot.kind === "meal-window") {
-    return `${mealLabelForSlot(context.slot, context.timeZone)} pick near ${context.areaLabel} that stays aligned with a ${preferences.budgetBand} budget.`;
+    return `${mealLabelForSlot(context.slot, context.timeZone)} pick near ${context.areaLabel} that fits a ${preferences.budgetBand} budget and still leaves ${commute.totalBufferMinutes} minutes for the commute.`;
   }
 
   const profile = INTEREST_PROFILES[primaryInterest(preferences)];
-  return `${profile.title} near ${context.areaLabel} that fits the ${context.slot.durationMinutes}-minute gap without forcing a reroute.`;
+  return `${profile.title} near ${context.areaLabel} that fits the ${commute.activityMinutesAvailable}-minute activity window without forcing a reroute.`;
+}
+
+function fallbackAddress(context: SlotContext) {
+  const anchors = uniqueStrings([
+    context.previousEvent?.location,
+    context.nextEvent?.location,
+    context.areaLabel === "your route" ? context.slot.city : context.areaLabel,
+  ]);
+
+  if (anchors.length >= 2) {
+    return `Near ${anchors[0]} and ${anchors[1]}`;
+  }
+
+  if (anchors[0]) {
+    return `Near ${anchors[0]}`;
+  }
+
+  return "Near the city center";
+}
+
+function centeredCoordinate(seed: string, base: number, range: number) {
+  const hashed = hashSeed(seed) % 10000;
+  const offset = ((hashed / 10000) - 0.5) * range;
+  return Number((base + offset).toFixed(4));
+}
+
+function fallbackCoordinates(context: SlotContext, seed: string) {
+  const citySeed = `${context.slot.city ?? context.areaLabel}-${context.timeZone}`;
+  const centerLat = coordinateFromSeed(`${citySeed}-lat`, -35, 70);
+  const centerLng = coordinateFromSeed(`${citySeed}-lng`, -120, 240);
+
+  return {
+    lat: centeredCoordinate(seed, centerLat, 0.08),
+    lng: centeredCoordinate(`${seed}-lng`, centerLng, 0.08),
+  };
 }
 
 function buildFallbackCandidates(context: SlotContext, preferences: SchedulePlanPreferences) {
@@ -480,6 +665,7 @@ function buildFallbackCandidates(context: SlotContext, preferences: SchedulePlan
 
   return names.map((name, index) => {
     const seed = `${context.slot.id}-${name}`;
+    const coordinates = fallbackCoordinates(context, seed);
     const place: PlaceCandidate = {
       placeId: undefined,
       name,
@@ -488,15 +674,15 @@ function buildFallbackCandidates(context: SlotContext, preferences: SchedulePlan
       rating: Number((4.7 - index * 0.2).toFixed(1)),
       priceBand: priceBands[index % priceBands.length] ?? "$$",
       reviewSnippets: [
-        `${context.areaLabel} option that stays easy to reach.`,
+        `${fallbackAddress(context)} with a quick return to the day.`,
         context.slot.kind === "meal-window"
-          ? "Reliable for a short meal window."
-          : "Low-friction stop that still feels intentional.",
+          ? "Reliable for a short meal without burning the next block."
+          : "Low-friction stop that still feels like a real detour.",
       ],
       reviewSummary: undefined,
-      address: `${context.areaLabel}, ${context.previousEvent?.location ?? context.nextEvent?.location ?? "city center"}`,
-      lat: coordinateFromSeed(seed, -60, 120),
-      lng: coordinateFromSeed(`${seed}-lng`, -150, 300),
+      address: fallbackAddress(context),
+      lat: coordinates.lat,
+      lng: coordinates.lng,
       googleMapsUri: undefined,
       reasonToRecommend: "",
     };
@@ -554,6 +740,8 @@ async function resolveSlotCandidates(
       durationMinutes: slot.durationMinutes,
       previousEventTitle: context.previousEvent?.title ?? null,
       nextEventTitle: context.nextEvent?.title ?? null,
+      previousEventLocation: context.previousEvent?.location ?? null,
+      nextEventLocation: context.nextEvent?.location ?? null,
     });
     const fallbackCandidates = buildFallbackCandidates(context, preferences);
     const usedFallbackCandidates = lookup.candidates.length === 0;
@@ -614,7 +802,11 @@ function fallbackItinerary(
     suggestions: resolutions.map((resolution) => {
       const selectedName = diningBySlot.get(resolution.context.slot.id) ?? preferredCandidate(resolution, preferences.budgetBand).name;
       const selectedPlace = findPlaceByName(resolution, selectedName) ?? resolution.candidates[0];
-      const window = suggestionWindow(resolution.context.slot, resolution.context.slot.kind === "meal-window" ? 60 : 35);
+      const window = suggestionWindow(
+        resolution.context.slot,
+        resolution.context.slot.kind === "meal-window" ? 60 : 35,
+        commutePlan(preferences, resolution.context.slot),
+      );
 
       return {
         slotId: resolution.context.slot.id,
@@ -759,6 +951,7 @@ function buildFinalSuggestions(
     const window = suggestionWindow(
       resolution.context.slot,
       draft.estimatedDurationMinutes || (resolution.context.slot.kind === "meal-window" ? 60 : 35),
+      commutePlan(preferences, resolution.context.slot),
     );
 
     return {
@@ -808,9 +1001,11 @@ async function buildSchedulePlan(request: SchedulePlanRequest): Promise<Schedule
           areaLabel: resolution.context.areaLabel,
           between: resolution.context.betweenCopy,
           durationMinutes: resolution.context.slot.durationMinutes,
+          commutePlan: commutePlan(request.preferences, resolution.context.slot),
           candidates: resolution.candidates.map((candidate) => ({
             name: candidate.name,
             category: candidate.category,
+            address: candidate.address,
             priceBand: candidate.priceBand,
             rating: candidate.rating,
             reasonToRecommend: candidate.reasonToRecommend,
@@ -825,7 +1020,7 @@ async function buildSchedulePlan(request: SchedulePlanRequest): Promise<Schedule
     step: "itinerary",
     schemaName: "schedule_itinerary_agent_output",
     schema: itineraryAgentOutputSchema,
-    systemPrompt: "You are the itinerary agent for a schedule-based trip planner. Build one concrete suggestion for each open slot using the provided candidates. Keep timing realistic, preserve the locked calendar structure, and use only exact candidate names.",
+    systemPrompt: "You are the itinerary agent for a schedule-based trip planner. Build one concrete suggestion for each open slot using the provided candidates. Treat each slot as inclusive of commute time, respect the supplied commute buffer and traffic assumptions, preserve the locked calendar structure, and use only exact candidate names.",
     userPrompt: JSON.stringify({
       budgetBand: request.preferences.budgetBand,
       pace: request.preferences.pace,
@@ -839,11 +1034,16 @@ async function buildSchedulePlan(request: SchedulePlanRequest): Promise<Schedule
         areaLabel: resolution.context.areaLabel,
         between: resolution.context.betweenCopy,
         durationMinutes: resolution.context.slot.durationMinutes,
+        previousLocation: resolution.context.previousEvent?.location ?? null,
+        nextLocation: resolution.context.nextEvent?.location ?? null,
+        commutePlan: commutePlan(request.preferences, resolution.context.slot),
         candidates: resolution.candidates.map((candidate) => ({
           name: candidate.name,
           category: candidate.category,
+          address: candidate.address,
           priceBand: candidate.priceBand,
           rating: candidate.rating,
+          reviewSummary: candidate.reviewSummary,
           reasonToRecommend: candidate.reasonToRecommend,
         })),
       })),

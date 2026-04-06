@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DEFAULT_PLANNING_EARLIEST_TIME,
@@ -63,6 +63,14 @@ const planningTimeOptions = Array.from({ length: 38 }, (_, index) => {
 
   return { value, label };
 });
+
+const loadingPhrases = [
+  "Checking where your free time actually survives the commute.",
+  "Trading random detours for stops that fit the route.",
+  "Holding buffer for traffic, transfers, and getting back on time.",
+  "Finding places that feel local without blowing up the calendar.",
+  "Stacking the trip so each gap still feels easy in real life.",
+];
 
 /* ------------------------------------------------------------------ */
 /*  Style helpers                                                      */
@@ -138,7 +146,8 @@ export function PlannerShell({
 
   /* ---- Submission ---- */
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
 
   /* ---- Derived city label ---- */
   const inferredCity = importedCalendar?.cityInference?.city ?? null;
@@ -149,6 +158,19 @@ export function PlannerShell({
     () => importedCalendar !== null && datesValid(startDate, endDate) && planningWindowIsValid,
     [importedCalendar, startDate, endDate, planningWindowIsValid],
   );
+
+  useEffect(() => {
+    if (!isGeneratingPlan) {
+      setLoadingPhraseIndex(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setLoadingPhraseIndex((current) => (current + 1) % loadingPhrases.length);
+    }, 1800);
+
+    return () => window.clearInterval(intervalId);
+  }, [isGeneratingPlan]);
 
   const resetImportedCalendar = useCallback(() => {
     setImportedCalendar(null);
@@ -270,6 +292,7 @@ export function PlannerShell({
   function generate() {
     if (!importedCalendar) return;
     setError(null);
+    setIsGeneratingPlan(true);
 
     const preferences: SchedulePlanPreferences = {
       provider,
@@ -289,14 +312,14 @@ export function PlannerShell({
       endDate,
     };
 
-    startTransition(async () => {
-      try {
-        const data = await tripPlannerApiClient.createSchedulePlan(payload);
+    void tripPlannerApiClient.createSchedulePlan(payload)
+      .then((data) => {
         router.push(`/plan/${data.planId}`);
-      } catch (err) {
+      })
+      .catch((err) => {
+        setIsGeneratingPlan(false);
         setError(err instanceof Error ? err.message : "Unable to generate plan.");
-      }
-    });
+      });
   }
 
   /* ---------------------------------------------------------------- */
@@ -304,7 +327,33 @@ export function PlannerShell({
   /* ---------------------------------------------------------------- */
 
   return (
-    <div className="w-full max-w-lg">
+    <>
+      {isGeneratingPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/65 px-6 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#fff9f4] px-6 py-8 text-center shadow-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-coral">Building your route</p>
+            <div className="mt-5 flex justify-center">
+              <div className="loading-spin-bar" aria-hidden="true" />
+            </div>
+            <h3 className="mt-6 text-2xl font-extrabold text-warm-900">Planning around real-world travel time</h3>
+            <p className="mt-3 min-h-[3.5rem] text-sm leading-6 text-warm-500" aria-live="polite">
+              {loadingPhrases[loadingPhraseIndex]}
+            </p>
+            <div className="mt-6 grid grid-cols-5 gap-2">
+              {loadingPhrases.map((phrase, index) => (
+                <span
+                  key={phrase}
+                  className={`h-1.5 rounded-full transition-colors ${
+                    index === loadingPhraseIndex ? "bg-coral" : "bg-warm-100"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="w-full max-w-lg">
       {/* Main card */}
       <div className="bg-cream rounded-2xl shadow-xl p-6 md:p-8">
         <h2 className="text-xl font-extrabold text-warm-900 mb-1">Drop your schedule</h2>
@@ -594,11 +643,11 @@ export function PlannerShell({
 
         <button
           type="button"
-          disabled={!canGenerate || isPending}
+          disabled={!canGenerate || isGeneratingPlan}
           onClick={generate}
           className="w-full rounded-xl bg-coral py-3 text-sm font-semibold text-white transition-colors hover:bg-coral-deep disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isPending ? "Scanning your gaps..." : "Find hidden gems"}
+          {isGeneratingPlan ? "Mapping commute-aware stops..." : "Find hidden gems"}
         </button>
 
         {!importedCalendar && (
@@ -607,6 +656,7 @@ export function PlannerShell({
           </p>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -110,8 +110,10 @@ test("createSchedulePlan builds place-backed suggestions with workflow metadata"
     assert.equal(plan.generation.live, false);
     assert.ok(plan.suggestions.every((suggestion) => suggestion.place.source === "fallback"));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.place.name.length > 0));
+    assert.ok(plan.suggestions.every((suggestion) => suggestion.place.address?.startsWith("Near ")));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.agentReason.length > 0));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.budgetReason.length > 0));
+    assert.ok(plan.suggestions.every((suggestion) => suggestion.transitNote.includes("minutes")));
   } finally {
     process.env.GOOGLE_PLACES_API_KEY = previousPlacesKey;
     process.env.OPENAI_API_KEY = previousOpenAIKey;
@@ -139,6 +141,36 @@ test("createSchedulePlan falls back when Google Places returns no candidates", a
     process.env.GOOGLE_PLACES_API_KEY = previousPlacesKey;
     process.env.OPENAI_API_KEY = previousOpenAIKey;
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("createSchedulePlan leaves visible commute buffer inside each suggestion window", async () => {
+  const previousPlacesKey = process.env.GOOGLE_PLACES_API_KEY;
+  const previousOpenAIKey = process.env.OPENAI_API_KEY;
+  const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  delete process.env.GOOGLE_PLACES_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+
+  try {
+    const request = sampleRequest();
+    request.preferences.transport = "transit";
+    const plan = await createSchedulePlan(request);
+
+    for (const suggestion of plan.suggestions) {
+      const slot = plan.slots.find((entry) => entry.id === suggestion.slotId);
+
+      assert.ok(slot);
+      assert.ok(Date.parse(suggestion.startsAt) >= Date.parse(slot.startsAt));
+      assert.ok(Date.parse(suggestion.endsAt) <= Date.parse(slot.endsAt));
+      assert.ok(suggestion.estimatedDurationMinutes < slot.durationMinutes);
+      assert.match(suggestion.transitNote, /platform waits|traffic|transfers/i);
+    }
+  } finally {
+    process.env.GOOGLE_PLACES_API_KEY = previousPlacesKey;
+    process.env.OPENAI_API_KEY = previousOpenAIKey;
+    process.env.ANTHROPIC_API_KEY = previousAnthropicKey;
   }
 });
 
