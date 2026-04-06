@@ -24,7 +24,7 @@ export default async function SchedulePlanPage({ params }: { params: Promise<{ p
   return (
     <TripResultsPage
       initialPlan={sanitizePlanForClient(stored)}
-      googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
+      googleMapsApiKey={process.env.GOOGLE_MAPS_API_KEY ?? ""}
       googleMapsMapId={process.env.GOOGLE_MAPS_MAP_ID ?? "DEMO_MAP_ID"}
       resolvedEventPins={resolvedEventPins}
     />

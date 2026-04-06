@@ -168,9 +168,10 @@ If `GOOGLE_PLACES_API_KEY` is missing, the planner falls back to deterministic p
 The web trip map will render live pins and routes when:
 
 ```bash
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...
+GOOGLE_MAPS_API_KEY=...
 GOOGLE_MAPS_MAP_ID=...
 ```
 
-Use a browser-restricted key for `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` with `Maps JavaScript API` and `Routes API` enabled.
+Use a browser-restricted key for `GOOGLE_MAPS_API_KEY` with `Maps JavaScript API` and `Routes API` enabled.
+Even though the env var is server-read, the key is still exposed to the browser at runtime because the Maps JavaScript SDK loads client-side.
 Keep `GOOGLE_PLACES_API_KEY` as a separate server-side key for Places requests.
