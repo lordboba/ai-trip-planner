@@ -913,15 +913,15 @@ async function buildSchedulePlan(request: SchedulePlanRequest): Promise<Schedule
 export async function createSchedulePlan(request: SchedulePlanRequest) {
   const parsed = schedulePlanRequestSchema.parse(request);
   const stored = await buildSchedulePlan(parsed);
-  return saveSchedulePlan(stored);
+  return await saveSchedulePlan(stored);
 }
 
-export function getSchedulePlanById(planId: string) {
-  return getStoredSchedulePlan(planId);
+export async function getSchedulePlanById(planId: string) {
+  return await getStoredSchedulePlan(planId);
 }
 
 export async function addSuggestionToSchedulePlan(planId: string, suggestionId: string) {
-  const existing = getStoredSchedulePlan(planId);
+  const existing = await getStoredSchedulePlan(planId);
 
   if (!existing) {
     return null;
@@ -963,5 +963,5 @@ export async function addSuggestionToSchedulePlan(planId: string, suggestionId: 
     timeline: sortEvents([...existing.timeline, addedEvent]),
   });
 
-  return saveSchedulePlan(updated);
+  return await saveSchedulePlan(updated);
 }

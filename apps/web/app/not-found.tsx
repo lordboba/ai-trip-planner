@@ -8,10 +8,10 @@ export default function NotFound() {
           Trip not found
         </p>
         <h1 className="text-3xl font-extrabold text-warm-900 mb-3">
-          This itinerary is no longer in memory.
+          This itinerary could not be found.
         </h1>
         <p className="text-warm-400 mb-6">
-          Trips are stored in-memory for this MVP. Generate a fresh plan from the onboarding flow.
+          The trip may have expired, been deleted, or failed to persist. Generate a fresh plan from the onboarding flow.
         </p>
         <Link
           href="/plan"

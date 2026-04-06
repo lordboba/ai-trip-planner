@@ -91,7 +91,7 @@ export async function fetchSchedulePlanRecord(planId: string): Promise<ScheduleP
   const backendUrl = getBackendUrl();
 
   if (!backendUrl) {
-    return getSchedulePlanById(planId) ?? null;
+    return await getSchedulePlanById(planId) ?? null;
   }
 
   const response = await fetch(`${backendUrl}/api/schedule-plans/${planId}`, {

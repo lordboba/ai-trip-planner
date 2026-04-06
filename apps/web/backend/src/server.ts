@@ -75,7 +75,7 @@ async function handler(request: IncomingMessage, response: ServerResponse) {
 
   if (method === "GET" && pathname.startsWith("/api/schedule-plans/")) {
     const suffix = pathname.slice("/api/schedule-plans/".length);
-    const stored = getSchedulePlanById(suffix);
+    const stored = await getSchedulePlanById(suffix);
 
     if (!stored) {
       sendJson(response, 404, { error: "Schedule plan not found" });

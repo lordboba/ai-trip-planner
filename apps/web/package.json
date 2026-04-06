@@ -24,6 +24,7 @@
     "@vis.gl/react-google-maps": "1.6.1",
     "framer-motion": "12.38.0",
     "next": "16.2.1",
+    "postgres": "3.4.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "tailwindcss": "4.2.2",

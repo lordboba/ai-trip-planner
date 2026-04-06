@@ -90,6 +90,12 @@ The standalone backend lives under [`apps/web/backend/src`](./apps/web/backend/s
 - `GET /api/schedule-plans/:planId`
 - `POST /api/schedule-plans/:planId/suggestions/:suggestionId/add`
 
+## Plan persistence
+
+If `DATABASE_URL` or `POSTGRES_URL` is set, schedule plans persist to Postgres instead of process memory. This is required for reliable deployed behavior on Vercel, where different requests can land on different serverless instances.
+
+If no Postgres env var is set, the app falls back to the old in-memory store for local development.
+
 The Next.js API routes go through a backend adapter. With no `BACKEND_URL`, they call the backend service layer in-process. If `BACKEND_URL` is set, schedule-plan creation, fetch, and suggestion-add switch to HTTP calls against that external backend without changing the UI code.
 
 ## Vercel deployment shape
