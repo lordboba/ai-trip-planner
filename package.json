@@ -17,5 +17,11 @@
     "start": "pnpm --filter @ai-trip-planner/web start",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "next": "16.2.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "typescript": "5.9.2"
   }
 }
