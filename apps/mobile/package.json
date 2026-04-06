@@ -1,0 +1,31 @@
+{
+  "name": "@ai-trip-planner/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-trip-planner/api-client": "workspace:*",
+    "@ai-trip-planner/core": "workspace:*",
+    "@ai-trip-planner/domain": "workspace:*",
+    "expo": "~55.0.11",
+    "expo-auth-session": "~55.0.12",
+    "expo-document-picker": "~55.0.11",
+    "expo-file-system": "~55.0.14",
+    "expo-router": "~55.0.10",
+    "expo-secure-store": "~55.0.11",
+    "expo-web-browser": "~55.0.12",
+    "react": "19.2.0",
+    "react-native": "0.83.4"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "5.9.2"
+  }
+}

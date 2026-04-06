@@ -1,11 +1,34 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import readline from "node:readline";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const workspaceDir = path.dirname(rootDir);
+
+for (const envFileName of [".env", ".env.local"]) {
+  const envFilePath = path.join(workspaceDir, envFileName);
+
+  if (fs.existsSync(envFilePath)) {
+    process.loadEnvFile?.(envFilePath);
+  }
+}
 
 const processes = [
-  { name: "frontend", color: "\x1b[36m", command: pnpmCommand, args: ["frontend:dev"] },
-  { name: "backend", color: "\x1b[33m", command: pnpmCommand, args: ["backend:dev"] },
+  {
+    name: "frontend",
+    color: "\x1b[36m",
+    command: pnpmCommand,
+    args: ["--filter", "@ai-trip-planner/web", "frontend:dev"],
+  },
+  {
+    name: "backend",
+    color: "\x1b[33m",
+    command: pnpmCommand,
+    args: ["--filter", "@ai-trip-planner/web", "backend:dev"],
+  },
 ];
 
 const children = [];
@@ -36,6 +59,7 @@ function shutdown(exitCode = 0) {
 
 for (const processConfig of processes) {
   const child = spawn(processConfig.command, processConfig.args, {
+    cwd: workspaceDir,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
   });

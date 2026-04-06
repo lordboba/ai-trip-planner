@@ -1,0 +1,39 @@
+{
+  "name": "@ai-trip-planner/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "10.x"
+  },
+  "scripts": {
+    "frontend:dev": "next dev --turbopack",
+    "backend:dev": "node --watch --experimental-strip-types backend/src/server.ts",
+    "backend:start": "node --experimental-strip-types backend/src/server.ts",
+    "build": "next build --webpack",
+    "start": "next start",
+    "test": "node --test --experimental-strip-types backend/src/services/schedule-plan-service.test.ts lib/server/schedule-backend.test.ts lib/server/mobile-api-routes.test.ts",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-trip-planner/api-client": "workspace:*",
+    "@ai-trip-planner/core": "workspace:*",
+    "@ai-trip-planner/domain": "workspace:*",
+    "@tailwindcss/postcss": "4.2.2",
+    "@vis.gl/react-google-maps": "1.6.1",
+    "framer-motion": "12.38.0",
+    "next": "16.2.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "tailwindcss": "4.2.2",
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/google.maps": "3.58.1",
+    "@types/node": "22.16.0",
+    "@types/react": "~19.2.10",
+    "@types/react-dom": "19.2.2",
+    "typescript": "5.9.2"
+  }
+}

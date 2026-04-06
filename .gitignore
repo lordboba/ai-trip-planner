@@ -1,6 +1,8 @@
 node_modules
 .next
 out
+.expo
+dist
 .env
 .env.local
 .env.production.local

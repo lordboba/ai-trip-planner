@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "AI Trip Planner",
+    "slug": "tripwise",
+    "scheme": "aitripplanner",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8a79760f-fac2-4dba-8e9b-ea13771ec879"
+      }
+    },
+    "owner": "lordboba-dev"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@ai-trip-planner/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./calendar-import": "./src/calendar-import.ts",
+    "./client-plan": "./src/client-plan.ts",
+    "./timezone": "./src/timezone.ts"
+  },
+  "dependencies": {
+    "@ai-trip-planner/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2"
+  }
+}

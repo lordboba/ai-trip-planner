@@ -1,14 +1,19 @@
 # AI Trip Planner
 
-Website-first MVP skeleton for the trip planner described in [planning.md](./planning.md).
+Workspace-first MVP for the trip planner described in [planning.md](./planning.md).
 
-The repo includes a standalone backend component under [`backend/src`](./backend/src) so the website and any future client can share the same schedule-planning API surface.
+The repo now ships as a `pnpm` workspace:
 
-For deployment, the intended phase-one setup is a single Vercel project: the Next.js frontend and the API routes ship together, while the backend workflow logic remains isolated under `backend/src`.
+- `apps/web`: Next.js website plus API routes
+- `apps/mobile`: Expo mobile client
+- `packages/domain`: shared Zod contracts and TypeScript types
+- `packages/core`: shared pure utilities and calendar parsing helpers
+- `packages/api-client`: shared typed API client for web and mobile
 
 ## Stack
 
 - `Next.js 16.2.1`
+- `Expo` mobile app
 - `React 19.2.0`
 - `TypeScript 5.9.2`
 - `pnpm 10.19.0`
@@ -24,13 +29,19 @@ Recommended install command:
 pnpm install --ignore-scripts
 ```
 
-## Run
+## Run web + backend
 
 ```bash
 pnpm dev
 ```
 
 Open `http://localhost:3000`.
+
+Run the mobile app separately:
+
+```bash
+pnpm mobile:dev
+```
 
 Note on TypeScript config: Next.js 16 may rewrite `tsconfig.json` during `dev` or `build` to add generated `.next/types` includes. This repo uses `tsconfig.typecheck.json` for `pnpm typecheck` so local typechecking remains stable even when Next mutates the main file.
 
@@ -46,9 +57,23 @@ Optional access gate:
 
 ```bash
 TRIPWISE_ACCESS_CODE=your-shared-code
+TRIPWISE_APP_SESSION_SECRET=long-random-string
 ```
 
 If `TRIPWISE_ACCESS_CODE` is set, the landing page shows a first-screen access gate and the planner routes stay locked behind an httpOnly cookie until the correct code is entered. Leave it unset to disable the gate entirely.
+`TRIPWISE_APP_SESSION_SECRET` signs short-lived bearer tokens for the mobile client.
+
+## Mobile env vars
+
+Create `apps/mobile/.env` or set shell env vars with:
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...
+```
+
+The mobile app uses the shared access code gate and its own installed-app Google OAuth flow.
 
 ## Backend
 
@@ -58,7 +83,7 @@ Run the standalone backend service:
 pnpm backend:dev
 ```
 
-The backend listens on `http://localhost:8787` by default and exposes:
+The standalone backend lives under [`apps/web/backend/src`](./apps/web/backend/src) and listens on `http://localhost:8787` by default. It exposes:
 
 - `GET /healthz`
 - `POST /api/schedule-plans`
@@ -70,9 +95,10 @@ The Next.js API routes go through a backend adapter. With no `BACKEND_URL`, they
 ## Vercel deployment shape
 
 - Deploy frontend and backend in the same Vercel project for phase one.
-- Keep the route handlers under `app/api/*` as the deployable backend surface.
-- Keep orchestration, schemas, and state-machine logic under `backend/src/*` so mobile and web share the same backend contracts.
-- The standalone `backend/src/server.ts` remains useful for local dev and eventual split-project deployment, but it is not required for Vercel.
+- Keep the route handlers under `apps/web/app/api/*` as the deployable backend surface.
+- Keep orchestration and service logic under `apps/web/backend/src/*`.
+- Keep portable contracts and helpers in `packages/*` so mobile and web share the same API/client surface.
+- The standalone `apps/web/backend/src/server.ts` remains useful for local dev and eventual split-project deployment, but it is not required for Vercel.
 
 ## Current flow
 
