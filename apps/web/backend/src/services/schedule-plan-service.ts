@@ -144,6 +144,13 @@ type CommutePlan = {
   trafficAssumption: string;
 };
 
+const DEMO_FALLBACK_CITY = "Los Angeles";
+const DEMO_FALLBACK_AREA = "UCLA / Westwood";
+const DEMO_FALLBACK_COORDINATE_CENTER = {
+  lat: 34.0689,
+  lng: -118.4452,
+};
+
 function sortEvents(events: readonly NormalizedCalendarEvent[]) {
   return [...events].sort((left, right) => (
     left.startsAt.localeCompare(right.startsAt) || left.endsAt.localeCompare(right.endsAt)
@@ -576,17 +583,13 @@ function fallbackPriceBands(budgetBand: BudgetBand) {
 }
 
 function fallbackPlaceNames(context: SlotContext, preferences: SchedulePlanPreferences) {
-  const area = (context.areaLabel === "your route"
-    ? context.previousEvent?.inferredCity ?? context.nextEvent?.inferredCity ?? "Local"
-    : context.areaLabel)
-    .split(",")[0]
-    .trim();
+  const area = DEMO_FALLBACK_AREA;
 
   if (context.slot.kind === "meal-window") {
     return [
-      `${area} Supper Club`,
-      `${area} Kitchen`,
-      `${area} Cafe`,
+      "Westwood Village Kitchen",
+      "Bruin Plate Cafe",
+      "Hilgard Corner Kitchen",
     ];
   }
 
@@ -622,21 +625,9 @@ function decorateReason(place: PlaceCandidate, context: SlotContext, preferences
 }
 
 function fallbackAddress(context: SlotContext) {
-  const anchors = uniqueStrings([
-    context.previousEvent?.location,
-    context.nextEvent?.location,
-    context.areaLabel === "your route" ? context.slot.city : context.areaLabel,
-  ]);
-
-  if (anchors.length >= 2) {
-    return `Near ${anchors[0]} and ${anchors[1]}`;
-  }
-
-  if (anchors[0]) {
-    return `Near ${anchors[0]}`;
-  }
-
-  return "Near the city center";
+  const anchors = uniqueStrings([context.previousEvent?.location, context.nextEvent?.location]).slice(0, 2);
+  const anchorCopy = anchors.length > 0 ? `Near ${anchors.join(" and ")}, ` : "";
+  return `${anchorCopy}${DEMO_FALLBACK_AREA}, ${DEMO_FALLBACK_CITY}`;
 }
 
 function centeredCoordinate(seed: string, base: number, range: number) {
@@ -646,13 +637,9 @@ function centeredCoordinate(seed: string, base: number, range: number) {
 }
 
 function fallbackCoordinates(context: SlotContext, seed: string) {
-  const citySeed = `${context.slot.city ?? context.areaLabel}-${context.timeZone}`;
-  const centerLat = coordinateFromSeed(`${citySeed}-lat`, -35, 70);
-  const centerLng = coordinateFromSeed(`${citySeed}-lng`, -120, 240);
-
   return {
-    lat: centeredCoordinate(seed, centerLat, 0.08),
-    lng: centeredCoordinate(`${seed}-lng`, centerLng, 0.08),
+    lat: centeredCoordinate(seed, DEMO_FALLBACK_COORDINATE_CENTER.lat, 0.045),
+    lng: centeredCoordinate(`${seed}-lng`, DEMO_FALLBACK_COORDINATE_CENTER.lng, 0.055),
   };
 }
 

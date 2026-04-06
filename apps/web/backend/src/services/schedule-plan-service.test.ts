@@ -110,7 +110,7 @@ test("createSchedulePlan builds place-backed suggestions with workflow metadata"
     assert.equal(plan.generation.live, false);
     assert.ok(plan.suggestions.every((suggestion) => suggestion.place.source === "fallback"));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.place.name.length > 0));
-    assert.ok(plan.suggestions.every((suggestion) => suggestion.place.address?.startsWith("Near ")));
+    assert.ok(plan.suggestions.every((suggestion) => suggestion.place.address?.includes("UCLA / Westwood, Los Angeles")));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.agentReason.length > 0));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.budgetReason.length > 0));
     assert.ok(plan.suggestions.every((suggestion) => suggestion.transitNote.includes("minutes")));
